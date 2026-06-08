@@ -1852,11 +1852,35 @@ function KnockoutPanel({ matches, teams }) {
       <PanelHeader icon={Trophy} title="Knockout Path" detail="Single-game bracket" />
       <div className="knockout-path border-t border-[#e5e9e0] p-4">
         <TeamPathColumn labels={leftTeams} side="left" />
-        <BracketRound matches={leftQuarters} teams={teams} title="Quarter-finals" pathOnly />
-        <BracketRound matches={semiFinals.slice(0, 1)} teams={teams} title="Semi-final" center />
+        <BracketRound
+          matches={leftQuarters}
+          pathOnly
+          side="left"
+          teams={teams}
+          title="Quarter-finals"
+        />
+        <BracketRound
+          center
+          matches={semiFinals.slice(0, 1)}
+          side="left"
+          teams={teams}
+          title="Semi-final"
+        />
         <FinalNode match={finalMatch} teams={teams} />
-        <BracketRound matches={semiFinals.slice(1, 2)} teams={teams} title="Semi-final" center />
-        <BracketRound matches={rightQuarters} teams={teams} title="Quarter-finals" pathOnly />
+        <BracketRound
+          center
+          matches={semiFinals.slice(1, 2)}
+          side="right"
+          teams={teams}
+          title="Semi-final"
+        />
+        <BracketRound
+          matches={rightQuarters}
+          pathOnly
+          side="right"
+          teams={teams}
+          title="Quarter-finals"
+        />
         <TeamPathColumn labels={rightTeams} side="right" />
       </div>
     </section>
@@ -1878,12 +1902,18 @@ function TeamPathColumn({ labels, side }) {
   )
 }
 
-function BracketRound({ center = false, matches, pathOnly = false, teams, title }) {
+function BracketRound({ center = false, matches, pathOnly = false, side, teams, title }) {
   return (
-    <div className={`bracket-round ${center ? 'center' : ''}`}>
+    <div className={`bracket-round ${center ? 'center' : ''} ${side ?? ''}`}>
       <p className="text-center text-xs font-semibold uppercase text-[#65756b]">{title}</p>
       {matches.map((match) => (
-        <BracketMatchNode key={match.id} match={match} pathOnly={pathOnly} teams={teams} />
+        <BracketMatchNode
+          key={match.id}
+          match={match}
+          pathOnly={pathOnly}
+          side={side}
+          teams={teams}
+        />
       ))}
     </div>
   )
@@ -1902,9 +1932,9 @@ function FinalNode({ match, teams }) {
   )
 }
 
-function BracketMatchNode({ match, pathOnly = false, teams }) {
+function BracketMatchNode({ match, pathOnly = false, side, teams }) {
   return (
-    <div className="bracket-match-node">
+    <div className={`bracket-match-node ${pathOnly ? 'path-only' : ''} ${side ?? ''}`}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <span className="text-xs font-semibold uppercase text-[#65756b]">{match.stage}</span>
         <span className="text-xs text-[#65756b]">{formatDate(match.date)}</span>
