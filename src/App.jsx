@@ -253,7 +253,12 @@ function App() {
 
   function handleVote(matchId, choice) {
     setVotes((currentVotes) => {
-      const matchVotes = currentVotes[matchId] ?? { home: 0, away: 0, userChoice: null }
+      const matchVotes = currentVotes[matchId] ?? {
+        home: 0,
+        draw: 0,
+        away: 0,
+        userChoice: null,
+      }
 
       if (matchVotes.userChoice === choice) {
         return currentVotes
@@ -261,6 +266,7 @@ function App() {
 
       const nextMatchVotes = {
         home: matchVotes.home ?? 0,
+        draw: matchVotes.draw ?? 0,
         away: matchVotes.away ?? 0,
         userChoice: choice,
       }
@@ -1609,17 +1615,23 @@ function MatchRow({
   )
 }
 
-function getVoteBreakdown(votes, matchId) {
-  const matchVotes = votes?.[matchId] ?? { home: 0, away: 0, userChoice: null }
+function getVoteBreakdown(votes, match) {
+  const matchVotes = votes?.[match.id] ?? { home: 0, draw: 0, away: 0, userChoice: null }
+  const hasDraw = match.stage === 'Group'
   const homeVotes = matchVotes.home ?? 0
+  const drawVotes = hasDraw ? matchVotes.draw ?? 0 : 0
   const awayVotes = matchVotes.away ?? 0
-  const totalVotes = homeVotes + awayVotes
+  const totalVotes = homeVotes + drawVotes + awayVotes
   const homePercent = totalVotes ? Math.round((homeVotes / totalVotes) * 100) : 0
-  const awayPercent = totalVotes ? 100 - homePercent : 0
+  const drawPercent = hasDraw && totalVotes ? Math.round((drawVotes / totalVotes) * 100) : 0
+  const awayPercent = totalVotes ? 100 - homePercent - drawPercent : 0
 
   return {
     awayPercent,
     awayVotes,
+    drawPercent,
+    drawVotes,
+    hasDraw,
     homePercent,
     homeVotes,
     totalVotes,
@@ -1628,11 +1640,14 @@ function getVoteBreakdown(votes, matchId) {
 }
 
 function VoteSummaryPill({ match, votes }) {
-  const breakdown = getVoteBreakdown(votes, match.id)
+  const breakdown = getVoteBreakdown(votes, match)
+  const summary = breakdown.hasDraw
+    ? `${breakdown.homePercent}% - ${breakdown.drawPercent}% - ${breakdown.awayPercent}%`
+    : `${breakdown.homePercent}% - ${breakdown.awayPercent}%`
 
   return (
     <span className="inline-flex min-h-7 items-center rounded-md bg-[#e7f3ec] px-2.5 text-xs font-semibold text-[#17633f]">
-      {breakdown.totalVotes ? `${breakdown.homePercent}% - ${breakdown.awayPercent}%` : 'Vote'}
+      {breakdown.totalVotes ? summary : 'Vote'}
     </span>
   )
 }
@@ -1640,7 +1655,10 @@ function VoteSummaryPill({ match, votes }) {
 function PredictionVote({ compact = false, match, onVote, teams, votes }) {
   const home = getMatchTeam(match, teams, 'home')
   const away = getMatchTeam(match, teams, 'away')
-  const breakdown = getVoteBreakdown(votes, match.id)
+  const breakdown = getVoteBreakdown(votes, match)
+  const summary = breakdown.hasDraw
+    ? `${breakdown.homePercent}% - ${breakdown.drawPercent}% - ${breakdown.awayPercent}%`
+    : `${breakdown.homePercent}% - ${breakdown.awayPercent}%`
 
   return (
     <section
@@ -1652,6 +1670,9 @@ function PredictionVote({ compact = false, match, onVote, teams, votes }) {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-[#14201b]">Who will win?</h3>
+          {breakdown.hasDraw && (
+            <p className="text-xs font-medium text-[#34433a]">Draw is available for group games</p>
+          )}
           <p className="text-xs text-[#65756b]">
             {breakdown.totalVotes
               ? `${breakdown.totalVotes} vote${breakdown.totalVotes === 1 ? '' : 's'}`
@@ -1660,11 +1681,17 @@ function PredictionVote({ compact = false, match, onVote, teams, votes }) {
         </div>
         {breakdown.totalVotes > 0 && (
           <span className="rounded-md bg-[#eef3e9] px-2.5 py-1 text-xs font-semibold text-[#34433a]">
-            {breakdown.homePercent}% - {breakdown.awayPercent}%
+            {summary}
           </span>
         )}
       </div>
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+      <div
+        className={`grid gap-2 ${
+          breakdown.hasDraw
+            ? 'sm:grid-cols-[1fr_120px_1fr]'
+            : 'sm:grid-cols-[1fr_auto_1fr]'
+        } sm:items-center`}
+      >
         <VoteTeamButton
           active={breakdown.userChoice === 'home'}
           onClick={() => onVote?.(match.id, 'home')}
@@ -1672,9 +1699,18 @@ function PredictionVote({ compact = false, match, onVote, teams, votes }) {
           team={home}
           votes={breakdown.homeVotes}
         />
-        <span className="hidden text-center text-xs font-semibold uppercase text-[#65756b] sm:block">
-          vs
-        </span>
+        {breakdown.hasDraw ? (
+          <VoteDrawButton
+            active={breakdown.userChoice === 'draw'}
+            onClick={() => onVote?.(match.id, 'draw')}
+            percent={breakdown.drawPercent}
+            votes={breakdown.drawVotes}
+          />
+        ) : (
+          <span className="hidden text-center text-xs font-semibold uppercase text-[#65756b] sm:block">
+            vs
+          </span>
+        )}
         <VoteTeamButton
           active={breakdown.userChoice === 'away'}
           align="right"
@@ -1685,6 +1721,30 @@ function PredictionVote({ compact = false, match, onVote, teams, votes }) {
         />
       </div>
     </section>
+  )
+}
+
+function VoteDrawButton({ active, onClick, percent, votes }) {
+  return (
+    <button
+      type="button"
+      className={`relative min-h-16 overflow-hidden rounded-lg border px-3 py-3 text-center transition ${
+        active
+          ? 'border-[#17633f] bg-[#f2fbf5]'
+          : 'border-[#dce1d7] bg-[#fbfdf9] hover:border-[#9cb4a5]'
+      }`}
+      onClick={onClick}
+    >
+      <span
+        className="absolute inset-x-0 bottom-0 bg-[#dff1e6] transition-all"
+        style={{ height: `${percent}%` }}
+        aria-hidden="true"
+      />
+      <span className="relative z-10 block text-sm font-semibold text-[#14201b]">Draw</span>
+      <span className="relative z-10 block text-xs text-[#65756b]">
+        {percent}% / {votes} votes
+      </span>
+    </button>
   )
 }
 
