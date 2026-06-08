@@ -1852,11 +1852,11 @@ function KnockoutPanel({ matches, teams }) {
       <PanelHeader icon={Trophy} title="Knockout Path" detail="Single-game bracket" />
       <div className="knockout-path border-t border-[#e5e9e0] p-4">
         <TeamPathColumn labels={leftTeams} side="left" />
-        <BracketRound matches={leftQuarters} teams={teams} title="Quarter-finals" />
+        <BracketRound matches={leftQuarters} teams={teams} title="Quarter-finals" pathOnly />
         <BracketRound matches={semiFinals.slice(0, 1)} teams={teams} title="Semi-final" center />
         <FinalNode match={finalMatch} teams={teams} />
         <BracketRound matches={semiFinals.slice(1, 2)} teams={teams} title="Semi-final" center />
-        <BracketRound matches={rightQuarters} teams={teams} title="Quarter-finals" />
+        <BracketRound matches={rightQuarters} teams={teams} title="Quarter-finals" pathOnly />
         <TeamPathColumn labels={rightTeams} side="right" />
       </div>
     </section>
@@ -1878,12 +1878,12 @@ function TeamPathColumn({ labels, side }) {
   )
 }
 
-function BracketRound({ center = false, matches, teams, title }) {
+function BracketRound({ center = false, matches, pathOnly = false, teams, title }) {
   return (
     <div className={`bracket-round ${center ? 'center' : ''}`}>
       <p className="text-center text-xs font-semibold uppercase text-[#65756b]">{title}</p>
       {matches.map((match) => (
-        <BracketMatchNode key={match.id} match={match} teams={teams} />
+        <BracketMatchNode key={match.id} match={match} pathOnly={pathOnly} teams={teams} />
       ))}
     </div>
   )
@@ -1902,17 +1902,24 @@ function FinalNode({ match, teams }) {
   )
 }
 
-function BracketMatchNode({ match, teams }) {
+function BracketMatchNode({ match, pathOnly = false, teams }) {
   return (
     <div className="bracket-match-node">
       <div className="mb-3 flex items-center justify-between gap-3">
         <span className="text-xs font-semibold uppercase text-[#65756b]">{match.stage}</span>
         <span className="text-xs text-[#65756b]">{formatDate(match.date)}</span>
       </div>
-      <div className="grid gap-2">
-        <PlaceholderTeam label={getNeutralTeamLabel(match, teams, 'home')} />
-        <PlaceholderTeam label={getNeutralTeamLabel(match, teams, 'away')} />
-      </div>
+      {pathOnly ? (
+        <div className="rounded-md bg-[#f8faf5] px-3 py-3">
+          <p className="truncate text-sm font-semibold text-[#14201b]">{match.time}</p>
+          <p className="mt-1 truncate text-xs text-[#65756b]">{match.venue}</p>
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          <PlaceholderTeam label={getNeutralTeamLabel(match, teams, 'home')} />
+          <PlaceholderTeam label={getNeutralTeamLabel(match, teams, 'away')} />
+        </div>
+      )}
     </div>
   )
 }
