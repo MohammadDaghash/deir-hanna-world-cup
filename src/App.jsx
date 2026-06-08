@@ -20,6 +20,7 @@ import {
   Trophy,
   Users,
   X,
+  Search,
 } from 'lucide-react'
 import './App.css'
 import {
@@ -218,6 +219,14 @@ function App() {
     [allMatches],
   )
   const liveMatch = allMatches.find((match) => match.status === 'live') ?? allMatches[0]
+  const latestResults = useMemo(
+    () =>
+      allMatches
+        .filter((match) => match.status === 'final')
+        .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))
+        .slice(0, 3),
+    [allMatches],
+  )
 
   function handleAddTeam(teamDraft) {
     setTournamentData((currentData) => {
@@ -423,8 +432,11 @@ function App() {
           <Overview
             knockoutMatches={knockoutMatches}
             leaderboards={leaderboards}
+            latestResults={latestResults}
+            lineups={lineups}
             liveMatch={liveMatch}
             onPlayerSelect={setSelectedPlayerId}
+            playersById={playersById}
             standings={standings}
             stats={stats}
             teams={teams}
@@ -526,8 +538,11 @@ function Header({ activeView, setActiveView }) {
 function Overview({
   knockoutMatches,
   leaderboards,
+  latestResults,
+  lineups,
   liveMatch,
   onPlayerSelect,
+  playersById,
   standings,
   stats,
   teams,
@@ -535,6 +550,15 @@ function Overview({
 }) {
   return (
     <div className="grid gap-6">
+      <ViewerFocus
+        latestResults={latestResults}
+        lineups={lineups}
+        liveMatch={liveMatch}
+        playersById={playersById}
+        standings={standings}
+        teams={teams}
+        upcomingMatches={upcomingMatches}
+      />
       <StatsGrid stats={stats} />
       <div className="grid gap-6 lg:grid-cols-[1fr_390px]">
         <GroupSnapshot standings={standings} />
@@ -548,6 +572,127 @@ function Overview({
         <MatchTimeline match={liveMatch} teams={teams} />
       </div>
       <KnockoutPanel matches={knockoutMatches} teams={teams} />
+    </div>
+  )
+}
+
+function ViewerFocus({
+  latestResults,
+  lineups,
+  liveMatch,
+  playersById,
+  standings,
+  teams,
+  upcomingMatches,
+}) {
+  const [openResultId, setOpenResultId] = useState(latestResults[0]?.id ?? null)
+  const focusMatch = liveMatch?.status === 'live' ? liveMatch : upcomingMatches[0]
+
+  return (
+    <section className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+      <div className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+        <PanelHeader
+          icon={focusMatch?.status === 'live' ? Timer : CalendarDays}
+          title={focusMatch?.status === 'live' ? 'Live Now' : 'Next Match'}
+          detail={focusMatch ? `${formatDate(focusMatch.date)} / ${focusMatch.time}` : 'Schedule'}
+        />
+        <div className="border-t border-[#e5e9e0] p-4">
+          {focusMatch ? (
+            <FocusMatchCard match={focusMatch} teams={teams} />
+          ) : (
+            <EmptyState text="No match scheduled yet." />
+          )}
+        </div>
+      </div>
+      <div className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+        <PanelHeader icon={Trophy} title="Qualification Race" detail="Current top two" />
+        <div className="grid gap-2 border-t border-[#e5e9e0] p-4">
+          {groups.map((group) => (
+            <QualificationRow key={group} group={group} rows={standings[group] ?? []} />
+          ))}
+        </div>
+      </div>
+      <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm lg:col-span-2">
+        <PanelHeader icon={Clock} title="Latest Results" detail="Completed games" />
+        <div className="divide-y divide-[#e5e9e0] border-t border-[#e5e9e0]">
+          {latestResults.length ? (
+            latestResults.map((match) => {
+              const matchOpen = openResultId === match.id
+
+              return (
+                <div key={match.id}>
+                  <MatchRow
+                    expanded
+                    match={match}
+                    matchOpen={matchOpen}
+                    onToggleDetails={() =>
+                      setOpenResultId((currentId) =>
+                        currentId === match.id ? null : match.id,
+                      )
+                    }
+                    teams={teams}
+                  />
+                  {matchOpen && (
+                    <MatchDetailsPanel
+                      lineups={lineups}
+                      match={match}
+                      playersById={playersById}
+                      teams={teams}
+                    />
+                  )}
+                </div>
+              )
+            })
+          ) : (
+            <div className="p-4">
+              <EmptyState text="No completed games yet." />
+            </div>
+          )}
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function FocusMatchCard({ match, teams }) {
+  const home = getMatchTeam(match, teams, 'home')
+  const away = getMatchTeam(match, teams, 'away')
+  const goals = (match.events ?? []).filter((event) => event.type === 'goal').length
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-lg bg-[#f8faf5] p-4">
+        <TeamBlock team={home} align="right" />
+        <ScoreCell match={match} />
+        <TeamBlock team={away} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <AdminMetric label="Venue" value={match.venue} />
+        <AdminMetric label="Status" value={match.status} />
+        <AdminMetric label="Goals" value={goals} />
+      </div>
+    </div>
+  )
+}
+
+function QualificationRow({ group, rows }) {
+  const leaders = rows.slice(0, 2)
+
+  return (
+    <div className="grid min-h-12 grid-cols-[64px_1fr] items-center gap-3 rounded-lg bg-[#f8faf5] px-3">
+      <span className="text-xs font-semibold uppercase text-[#65756b]">Group {group}</span>
+      <div className="flex min-w-0 flex-wrap gap-2">
+        {leaders.map((row) => (
+          <span
+            key={row.team.id}
+            className="inline-flex min-h-8 min-w-0 items-center gap-2 rounded-md bg-white px-2 text-xs font-semibold text-[#34433a]"
+          >
+            <FlagMark team={row.team} small />
+            <span className="truncate">{row.team.code}</span>
+            <span>{row.points} pts</span>
+          </span>
+        ))}
+      </div>
     </div>
   )
 }
@@ -836,9 +981,27 @@ function PlayerDetailsModal({ allMatches, onClose, player, teams }) {
 }
 
 function ModalShell({ children, onClose, title }) {
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-[#14201b]/55 px-4 py-6">
-      <section className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-xl">
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-[#14201b]/55 px-4 py-6"
+      onClick={onClose}
+    >
+      <section
+        className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex min-h-14 items-center justify-between gap-4 border-b border-[#e5e9e0] px-4">
           <h2 className="truncate text-base font-semibold text-[#14201b]">{title}</h2>
           <button
@@ -941,14 +1104,23 @@ function StatsGrid({ stats }) {
 function LiveMatch({ match, teams }) {
   const home = getMatchTeam(match, teams, 'home')
   const away = getMatchTeam(match, teams, 'away')
+  const label =
+    match.status === 'live'
+      ? 'Live match'
+      : match.status === 'scheduled'
+        ? 'Next match'
+        : 'Featured match'
+  const detail = match.status === 'live' && match.minute
+    ? `${match.venue} / ${match.minute}'`
+    : `${formatDate(match.date)} / ${match.time}`
 
   return (
     <div className="rounded-lg border border-white/15 bg-white text-[#14201b] shadow-md">
       <div className="flex items-center justify-between border-b border-[#e5e9e0] px-4 py-3">
         <div>
-          <p className="text-xs font-semibold uppercase text-[#65756b]">Live match</p>
+          <p className="text-xs font-semibold uppercase text-[#65756b]">{label}</p>
           <p className="mt-1 text-sm text-[#34433a]">
-            {match.venue} / {match.minute}'
+            {detail}
           </p>
         </div>
         <StatusPill status={match.status} />
@@ -1070,16 +1242,22 @@ function TopContributors({ onPlayerSelect, players }) {
     <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
       <PanelHeader icon={Medal} title="Goal Contributions" detail="Goals + assists" />
       <div className="divide-y divide-[#e5e9e0] border-t border-[#e5e9e0]">
-        {players.map((player, index) => (
-          <PlayerStatRow
-            key={player.id}
-            onPlayerSelect={onPlayerSelect}
-            player={player}
-            index={index}
-            value={player.contributions}
-            label={`${player.goals} G / ${player.assists} A`}
-          />
-        ))}
+        {players.length ? (
+          players.map((player, index) => (
+            <PlayerStatRow
+              key={player.id}
+              onPlayerSelect={onPlayerSelect}
+              player={player}
+              index={index}
+              value={player.contributions}
+              label={`${player.goals} G / ${player.assists} A`}
+            />
+          ))
+        ) : (
+          <div className="p-4">
+            <EmptyState text="No player contributions recorded yet." />
+          </div>
+        )}
       </div>
     </section>
   )
@@ -1090,32 +1268,45 @@ function UpcomingPanel({ matches, teams }) {
     <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
       <PanelHeader icon={CalendarDays} title="Upcoming Matches" detail="Schedule" />
       <div className="divide-y divide-[#e5e9e0] border-t border-[#e5e9e0]">
-        {matches.map((match) => (
-          <MatchRow key={match.id} match={match} teams={teams} />
-        ))}
+        {matches.length ? (
+          matches.map((match) => (
+            <MatchRow key={match.id} match={match} teams={teams} />
+          ))
+        ) : (
+          <div className="p-4">
+            <EmptyState text="No upcoming matches scheduled." />
+          </div>
+        )}
       </div>
     </section>
   )
 }
 
 function MatchTimeline({ match, teams }) {
+  const events = match?.events ?? []
+  const detail = match?.status === 'live' && match.minute ? `${match.minute}'` : 'Updates'
+
   return (
     <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
-      <PanelHeader icon={Clock} title="Match Timeline" detail={`${match.minute}'`} />
+      <PanelHeader icon={Clock} title="Match Timeline" detail={detail} />
       <div className="grid gap-3 border-t border-[#e5e9e0] p-4">
-        {match.events?.map((event) => {
-          const team = teams.find((item) => item.id === event.teamId)
+        {events.length ? (
+          events.map((event) => {
+            const team = teams.find((item) => item.id === event.teamId)
 
-          return (
-            <div key={`${event.minute}-${event.player}`} className="timeline-event">
-              <span className="timeline-dot"></span>
-              <span className="w-10 text-xs font-semibold text-[#65756b]">{event.minute}'</span>
-              <FlagMark team={team} small />
-              <span className="min-w-0 truncate text-sm font-medium">{event.player}</span>
-              <span className="text-xs uppercase text-[#65756b]">{event.type}</span>
-            </div>
-          )
-        })}
+            return (
+              <div key={`${event.minute}-${event.player}`} className="timeline-event">
+                <span className="timeline-dot"></span>
+                <span className="w-10 text-xs font-semibold text-[#65756b]">{event.minute}'</span>
+                <FlagMark team={team} small />
+                <span className="min-w-0 truncate text-sm font-medium">{event.player}</span>
+                <span className="text-xs uppercase text-[#65756b]">{event.type}</span>
+              </div>
+            )
+          })
+        ) : (
+          <EmptyState text="No match events recorded yet." />
+        )}
       </div>
     </section>
   )
@@ -1123,11 +1314,31 @@ function MatchTimeline({ match, teams }) {
 
 function MatchesBoard({ lineups, matches, playersById, teams }) {
   const [filter, setFilter] = useState('All')
+  const [searchTerm, setSearchTerm] = useState('')
   const [openMatchId, setOpenMatchId] = useState(
     matches.find((match) => lineups[match.id])?.id ?? null,
   )
   const filters = ['All', 'Group', 'Knockout', 'Live']
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase()
   const visibleMatches = matches.filter((match) => {
+    const home = getMatchTeam(match, teams, 'home')
+    const away = getMatchTeam(match, teams, 'away')
+    const text = [
+      home.country,
+      home.code,
+      away.country,
+      away.code,
+      match.stage,
+      match.group,
+      match.venue,
+      match.status,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    const matchesSearch = !normalizedSearchTerm || text.includes(normalizedSearchTerm)
+
+    if (!matchesSearch) return false
     if (filter === 'All') return true
     if (filter === 'Knockout') return match.stage !== 'Group'
     if (filter === 'Live') return match.status === 'live'
@@ -1152,35 +1363,64 @@ function MatchesBoard({ lineups, matches, playersById, teams }) {
           </button>
         ))}
       </Toolbar>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#65756b]" />
+        <input
+          className="min-h-11 w-full rounded-lg border border-[#d4dace] bg-white pl-10 pr-3 text-sm outline-none transition focus:border-[#1f6d4d] focus:ring-2 focus:ring-[#b8dcc7]"
+          onChange={(event) => setSearchTerm(event.target.value)}
+          placeholder="Search matches by team, stage, venue, or status"
+          value={searchTerm}
+        />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-[#65756b]">
+        <span>
+          Showing {visibleMatches.length} of {matches.length} matches
+        </span>
+        {normalizedSearchTerm && (
+          <button
+            type="button"
+            className="rounded-md border border-[#d4dace] bg-white px-3 py-1.5 text-xs font-semibold text-[#34433a]"
+            onClick={() => setSearchTerm('')}
+          >
+            Clear search
+          </button>
+        )}
+      </div>
       <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
         <div className="divide-y divide-[#e5e9e0]">
-          {visibleMatches.map((match) => {
-            const matchOpen = openMatchId === match.id
+          {visibleMatches.length ? (
+            visibleMatches.map((match) => {
+              const matchOpen = openMatchId === match.id
 
-            return (
-              <div key={match.id}>
-                <MatchRow
-                  match={match}
-                  expanded
-                  matchOpen={matchOpen}
-                  onToggleDetails={() =>
-                    setOpenMatchId((currentId) =>
-                      currentId === match.id ? null : match.id,
-                    )
-                  }
-                  teams={teams}
-                />
-                {matchOpen && (
-                  <MatchDetailsPanel
-                    lineups={lineups}
+              return (
+                <div key={match.id}>
+                  <MatchRow
                     match={match}
-                    playersById={playersById}
+                    expanded
+                    matchOpen={matchOpen}
+                    onToggleDetails={() =>
+                      setOpenMatchId((currentId) =>
+                        currentId === match.id ? null : match.id,
+                      )
+                    }
                     teams={teams}
                   />
-                )}
-              </div>
-            )
-          })}
+                  {matchOpen && (
+                    <MatchDetailsPanel
+                      lineups={lineups}
+                      match={match}
+                      playersById={playersById}
+                      teams={teams}
+                    />
+                  )}
+                </div>
+              )
+            })
+          ) : (
+            <div className="p-4">
+              <EmptyState text="No matches match the current search." />
+            </div>
+          )}
         </div>
       </section>
     </div>
@@ -1196,6 +1436,7 @@ function MatchRow({
 }) {
   const home = getMatchTeam(match, teams, 'home')
   const away = getMatchTeam(match, teams, 'away')
+  const goalCount = (match.events ?? []).filter((event) => event.type === 'goal').length
   const clickableProps = expanded
     ? {
         role: 'button',
@@ -1234,6 +1475,11 @@ function MatchRow({
       </div>
       <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
         <StatusPill status={match.status} />
+        {goalCount > 0 && (
+          <span className="inline-flex min-h-7 items-center rounded-md bg-[#eef3e9] px-2.5 text-xs font-semibold text-[#34433a]">
+            {goalCount} goals
+          </span>
+        )}
         {expanded && (
           <button
             type="button"
@@ -2126,7 +2372,9 @@ function AdminMetric({ label, value }) {
   return (
     <div className="rounded-md bg-[#eef3e9] px-3 py-3">
       <p className="text-xs font-semibold uppercase text-[#65756b]">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-[#14201b]">{value}</p>
+      <p className="mt-1 break-words text-lg font-semibold leading-tight text-[#14201b]">
+        {value}
+      </p>
     </div>
   )
 }
