@@ -75,6 +75,7 @@ const positionOptions = [
   { label: 'WG', value: 'WG' },
 ]
 const storageKey = 'deir-hanna-world-cup-admin-data'
+const voteStorageKey = 'deir-hanna-world-cup-votes'
 const defaultTournamentData = {
   teams: seedTeams,
   players: seedPlayers,
@@ -152,6 +153,27 @@ function usePersistentTournamentData() {
   return [data, setData]
 }
 
+function usePersistentVotes() {
+  const [votes, setVotes] = useState(() => {
+    if (typeof window === 'undefined') {
+      return {}
+    }
+
+    try {
+      const storedVotes = window.localStorage.getItem(voteStorageKey)
+      return storedVotes ? JSON.parse(storedVotes) : {}
+    } catch {
+      return {}
+    }
+  })
+
+  useEffect(() => {
+    window.localStorage.setItem(voteStorageKey, JSON.stringify(votes))
+  }, [votes])
+
+  return [votes, setVotes]
+}
+
 function slugify(value) {
   return value
     .trim()
@@ -196,6 +218,7 @@ function normalizeScore(value) {
 
 function App() {
   const [tournamentData, setTournamentData] = usePersistentTournamentData()
+  const [votes, setVotes] = usePersistentVotes()
   const [activeView, setActiveView] = useState('overview')
   const [selectedGroup, setSelectedGroup] = useState('A')
   const [adminUnlocked, setAdminUnlocked] = useState(false)
@@ -227,6 +250,36 @@ function App() {
         .slice(0, 3),
     [allMatches],
   )
+
+  function handleVote(matchId, choice) {
+    setVotes((currentVotes) => {
+      const matchVotes = currentVotes[matchId] ?? { home: 0, away: 0, userChoice: null }
+
+      if (matchVotes.userChoice === choice) {
+        return currentVotes
+      }
+
+      const nextMatchVotes = {
+        home: matchVotes.home ?? 0,
+        away: matchVotes.away ?? 0,
+        userChoice: choice,
+      }
+
+      if (matchVotes.userChoice) {
+        nextMatchVotes[matchVotes.userChoice] = Math.max(
+          0,
+          nextMatchVotes[matchVotes.userChoice] - 1,
+        )
+      }
+
+      nextMatchVotes[choice] += 1
+
+      return {
+        ...currentVotes,
+        [matchId]: nextMatchVotes,
+      }
+    })
+  }
 
   function handleAddTeam(teamDraft) {
     setTournamentData((currentData) => {
@@ -436,11 +489,13 @@ function App() {
             lineups={lineups}
             liveMatch={liveMatch}
             onPlayerSelect={setSelectedPlayerId}
+            onVote={handleVote}
             playersById={playersById}
             standings={standings}
             stats={stats}
             teams={teams}
             upcomingMatches={upcomingMatches}
+            votes={votes}
           />
         )}
         {activeView === 'teams' && (
@@ -454,8 +509,10 @@ function App() {
           <MatchesBoard
             lineups={lineups}
             matches={allMatches}
+            onVote={handleVote}
             playersById={playersById}
             teams={teams}
+            votes={votes}
           />
         )}
         {activeView === 'tables' && (
@@ -542,11 +599,13 @@ function Overview({
   lineups,
   liveMatch,
   onPlayerSelect,
+  onVote,
   playersById,
   standings,
   stats,
   teams,
   upcomingMatches,
+  votes,
 }) {
   return (
     <div className="grid gap-6">
@@ -554,10 +613,12 @@ function Overview({
         latestResults={latestResults}
         lineups={lineups}
         liveMatch={liveMatch}
+        onVote={onVote}
         playersById={playersById}
         standings={standings}
         teams={teams}
         upcomingMatches={upcomingMatches}
+        votes={votes}
       />
       <StatsGrid stats={stats} />
       <div className="grid gap-6 lg:grid-cols-[1fr_390px]">
@@ -568,7 +629,12 @@ function Overview({
         />
       </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_390px]">
-        <UpcomingPanel matches={upcomingMatches.slice(0, 6)} teams={teams} />
+        <UpcomingPanel
+          matches={upcomingMatches.slice(0, 6)}
+          onVote={onVote}
+          teams={teams}
+          votes={votes}
+        />
         <MatchTimeline match={liveMatch} teams={teams} />
       </div>
       <KnockoutPanel matches={knockoutMatches} teams={teams} />
@@ -580,10 +646,12 @@ function ViewerFocus({
   latestResults,
   lineups,
   liveMatch,
+  onVote,
   playersById,
   standings,
   teams,
   upcomingMatches,
+  votes,
 }) {
   const [openResultId, setOpenResultId] = useState(latestResults[0]?.id ?? null)
   const focusMatch = liveMatch?.status === 'live' ? liveMatch : upcomingMatches[0]
@@ -598,7 +666,12 @@ function ViewerFocus({
         />
         <div className="border-t border-[#e5e9e0] p-4">
           {focusMatch ? (
-            <FocusMatchCard match={focusMatch} teams={teams} />
+            <FocusMatchCard
+              match={focusMatch}
+              onVote={onVote}
+              teams={teams}
+              votes={votes}
+            />
           ) : (
             <EmptyState text="No match scheduled yet." />
           )}
@@ -654,7 +727,7 @@ function ViewerFocus({
   )
 }
 
-function FocusMatchCard({ match, teams }) {
+function FocusMatchCard({ match, onVote, teams, votes }) {
   const home = getMatchTeam(match, teams, 'home')
   const away = getMatchTeam(match, teams, 'away')
   const goals = (match.events ?? []).filter((event) => event.type === 'goal').length
@@ -671,6 +744,14 @@ function FocusMatchCard({ match, teams }) {
         <AdminMetric label="Status" value={match.status} />
         <AdminMetric label="Goals" value={goals} />
       </div>
+      {match.status === 'scheduled' && match.homeTeamId && match.awayTeamId && (
+        <PredictionVote
+          match={match}
+          onVote={onVote}
+          teams={teams}
+          votes={votes}
+        />
+      )}
     </div>
   )
 }
@@ -1263,14 +1344,20 @@ function TopContributors({ onPlayerSelect, players }) {
   )
 }
 
-function UpcomingPanel({ matches, teams }) {
+function UpcomingPanel({ matches, onVote, teams, votes }) {
   return (
     <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
       <PanelHeader icon={CalendarDays} title="Upcoming Matches" detail="Schedule" />
       <div className="divide-y divide-[#e5e9e0] border-t border-[#e5e9e0]">
         {matches.length ? (
           matches.map((match) => (
-            <MatchRow key={match.id} match={match} teams={teams} />
+            <MatchRow
+              key={match.id}
+              match={match}
+              onVote={onVote}
+              teams={teams}
+              votes={votes}
+            />
           ))
         ) : (
           <div className="p-4">
@@ -1312,7 +1399,7 @@ function MatchTimeline({ match, teams }) {
   )
 }
 
-function MatchesBoard({ lineups, matches, playersById, teams }) {
+function MatchesBoard({ lineups, matches, onVote, playersById, teams, votes }) {
   const [filter, setFilter] = useState('All')
   const [searchTerm, setSearchTerm] = useState('')
   const [openMatchId, setOpenMatchId] = useState(
@@ -1398,6 +1485,7 @@ function MatchesBoard({ lineups, matches, playersById, teams }) {
                     match={match}
                     expanded
                     matchOpen={matchOpen}
+                    onVote={onVote}
                     onToggleDetails={() =>
                       setOpenMatchId((currentId) =>
                         currentId === match.id ? null : match.id,
@@ -1409,8 +1497,10 @@ function MatchesBoard({ lineups, matches, playersById, teams }) {
                     <MatchDetailsPanel
                       lineups={lineups}
                       match={match}
+                      onVote={onVote}
                       playersById={playersById}
                       teams={teams}
+                      votes={votes}
                     />
                   )}
                 </div>
@@ -1431,8 +1521,10 @@ function MatchRow({
   match,
   expanded = false,
   matchOpen = false,
+  onVote,
   onToggleDetails,
   teams,
+  votes,
 }) {
   const home = getMatchTeam(match, teams, 'home')
   const away = getMatchTeam(match, teams, 'away')
@@ -1453,59 +1545,204 @@ function MatchRow({
 
   return (
     <article
-      className={`grid gap-3 px-4 py-4 sm:grid-cols-[180px_1fr_auto] sm:items-center ${
-        expanded ? 'cursor-pointer transition hover:bg-[#fbfdf9]' : ''
-      }`}
+      className={`${expanded ? 'cursor-pointer transition hover:bg-[#fbfdf9]' : ''}`}
       {...clickableProps}
     >
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-[#14201b]">
-          {match.stage}
-          {match.group ? ` ${match.group}` : ''}
-        </p>
-        <p className="mt-1 text-xs text-[#65756b]">
-          {formatDate(match.date)} / {match.time}
-        </p>
-        {expanded && <p className="mt-1 truncate text-xs text-[#65756b]">{match.venue}</p>}
+      <div className="grid gap-3 px-4 py-4 sm:grid-cols-[180px_1fr_auto] sm:items-center">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-[#14201b]">
+            {match.stage}
+            {match.group ? ` ${match.group}` : ''}
+          </p>
+          <p className="mt-1 text-xs text-[#65756b]">
+            {formatDate(match.date)} / {match.time}
+          </p>
+          {expanded && <p className="mt-1 truncate text-xs text-[#65756b]">{match.venue}</p>}
+        </div>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+          <TeamMini team={home} align="right" />
+          <ScoreCell match={match} />
+          <TeamMini team={away} />
+        </div>
+        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+          <StatusPill status={match.status} />
+          {goalCount > 0 && (
+            <span className="inline-flex min-h-7 items-center rounded-md bg-[#eef3e9] px-2.5 text-xs font-semibold text-[#34433a]">
+              {goalCount} goals
+            </span>
+          )}
+          {match.status === 'scheduled' && match.homeTeamId && match.awayTeamId && (
+            <VoteSummaryPill match={match} votes={votes} />
+          )}
+          {expanded && (
+            <button
+              type="button"
+              className={`inline-flex min-h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold ${
+                matchOpen
+                  ? 'border-[#163428] bg-[#163428] text-white'
+                  : 'border-[#d4dace] bg-[#fbfdf9] text-[#34433a]'
+              }`}
+              onClick={(event) => {
+                event.stopPropagation()
+                onToggleDetails?.()
+              }}
+              aria-expanded={matchOpen}
+            >
+              <ClipboardList className="h-3.5 w-3.5" />
+              Details
+            </button>
+          )}
+        </div>
       </div>
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-        <TeamMini team={home} align="right" />
-        <ScoreCell match={match} />
-        <TeamMini team={away} />
-      </div>
-      <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
-        <StatusPill status={match.status} />
-        {goalCount > 0 && (
-          <span className="inline-flex min-h-7 items-center rounded-md bg-[#eef3e9] px-2.5 text-xs font-semibold text-[#34433a]">
-            {goalCount} goals
-          </span>
-        )}
-        {expanded && (
-          <button
-            type="button"
-            className={`inline-flex min-h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold ${
-              matchOpen
-                ? 'border-[#163428] bg-[#163428] text-white'
-                : 'border-[#d4dace] bg-[#fbfdf9] text-[#34433a]'
-            }`}
-            onClick={(event) => {
-              event.stopPropagation()
-              onToggleDetails?.()
-            }}
-            aria-expanded={matchOpen}
-          >
-            <ClipboardList className="h-3.5 w-3.5" />
-            Details
-          </button>
-        )}
-      </div>
+      {!expanded && match.status === 'scheduled' && match.homeTeamId && match.awayTeamId && (
+        <div className="px-4 pb-4">
+          <PredictionVote
+            compact
+            match={match}
+            onVote={onVote}
+            teams={teams}
+            votes={votes}
+          />
+        </div>
+      )}
     </article>
   )
 }
 
-function MatchDetailsPanel({ lineups, match, playersById, teams }) {
+function getVoteBreakdown(votes, matchId) {
+  const matchVotes = votes?.[matchId] ?? { home: 0, away: 0, userChoice: null }
+  const homeVotes = matchVotes.home ?? 0
+  const awayVotes = matchVotes.away ?? 0
+  const totalVotes = homeVotes + awayVotes
+  const homePercent = totalVotes ? Math.round((homeVotes / totalVotes) * 100) : 0
+  const awayPercent = totalVotes ? 100 - homePercent : 0
+
+  return {
+    awayPercent,
+    awayVotes,
+    homePercent,
+    homeVotes,
+    totalVotes,
+    userChoice: matchVotes.userChoice ?? null,
+  }
+}
+
+function VoteSummaryPill({ match, votes }) {
+  const breakdown = getVoteBreakdown(votes, match.id)
+
+  return (
+    <span className="inline-flex min-h-7 items-center rounded-md bg-[#e7f3ec] px-2.5 text-xs font-semibold text-[#17633f]">
+      {breakdown.totalVotes ? `${breakdown.homePercent}% - ${breakdown.awayPercent}%` : 'Vote'}
+    </span>
+  )
+}
+
+function PredictionVote({ compact = false, match, onVote, teams, votes }) {
+  const home = getMatchTeam(match, teams, 'home')
+  const away = getMatchTeam(match, teams, 'away')
+  const breakdown = getVoteBreakdown(votes, match.id)
+
+  return (
+    <section
+      className={`rounded-lg border border-[#dce1d7] bg-white ${
+        compact ? 'p-3' : 'p-4'
+      }`}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-[#14201b]">Who will win?</h3>
+          <p className="text-xs text-[#65756b]">
+            {breakdown.totalVotes
+              ? `${breakdown.totalVotes} vote${breakdown.totalVotes === 1 ? '' : 's'}`
+              : 'Be first to vote'}
+          </p>
+        </div>
+        {breakdown.totalVotes > 0 && (
+          <span className="rounded-md bg-[#eef3e9] px-2.5 py-1 text-xs font-semibold text-[#34433a]">
+            {breakdown.homePercent}% - {breakdown.awayPercent}%
+          </span>
+        )}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+        <VoteTeamButton
+          active={breakdown.userChoice === 'home'}
+          onClick={() => onVote?.(match.id, 'home')}
+          percent={breakdown.homePercent}
+          team={home}
+          votes={breakdown.homeVotes}
+        />
+        <span className="hidden text-center text-xs font-semibold uppercase text-[#65756b] sm:block">
+          vs
+        </span>
+        <VoteTeamButton
+          active={breakdown.userChoice === 'away'}
+          align="right"
+          onClick={() => onVote?.(match.id, 'away')}
+          percent={breakdown.awayPercent}
+          team={away}
+          votes={breakdown.awayVotes}
+        />
+      </div>
+    </section>
+  )
+}
+
+function VoteTeamButton({ active, align = 'left', onClick, percent, team, votes }) {
+  return (
+    <button
+      type="button"
+      className={`relative min-h-16 overflow-hidden rounded-lg border px-3 py-3 text-left transition ${
+        active
+          ? 'border-[#17633f] bg-[#f2fbf5]'
+          : 'border-[#dce1d7] bg-[#fbfdf9] hover:border-[#9cb4a5]'
+      }`}
+      onClick={onClick}
+    >
+      <span
+        className={`absolute inset-y-0 ${
+          align === 'right' ? 'right-0' : 'left-0'
+        } bg-[#dff1e6] transition-all`}
+        style={{ width: `${percent}%` }}
+        aria-hidden="true"
+      />
+      <span
+        className={`relative z-10 flex items-center gap-3 ${
+          align === 'right' ? 'justify-end text-right' : ''
+        }`}
+      >
+        {align === 'right' && (
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold text-[#14201b]">
+              {team.country}
+            </span>
+            <span className="block text-xs text-[#65756b]">
+              {percent}% / {votes} votes
+            </span>
+          </span>
+        )}
+        <FlagMark team={team} small />
+        {align !== 'right' && (
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold text-[#14201b]">
+              {team.country}
+            </span>
+            <span className="block text-xs text-[#65756b]">
+              {percent}% / {votes} votes
+            </span>
+          </span>
+        )}
+      </span>
+    </button>
+  )
+}
+
+function MatchDetailsPanel({ lineups, match, onVote, playersById, teams, votes }) {
   return (
     <div className="grid gap-4 border-t border-[#e5e9e0] bg-[#fbfdf9] px-4 py-4">
+      {match.status === 'scheduled' && match.homeTeamId && match.awayTeamId && (
+        <PredictionVote match={match} onVote={onVote} teams={teams} votes={votes} />
+      )}
       <ScoringSummary match={match} teams={teams} />
       <LineupsPanel lineups={lineups} match={match} playersById={playersById} teams={teams} />
     </div>
