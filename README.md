@@ -44,7 +44,7 @@ values ('your-email@example.com');
 5. Generate seed SQL and run the output in the Supabase SQL editor:
 
 ```bash
-npm run seed:sql > /tmp/deir-hanna-seed.sql
+npm --silent run seed:sql > /tmp/deir-hanna-seed.sql
 ```
 
 Admin access uses Supabase magic-link email login. Public viewers do not need accounts.
