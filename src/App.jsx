@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
   BarChart3,
@@ -24,13 +24,25 @@ import {
 } from 'lucide-react'
 import './App.css'
 import {
-  groups,
-  knockoutMatches as seedKnockoutMatches,
-  lineups as seedLineups,
-  matches as seedMatches,
-  players as seedPlayers,
-  teams as seedTeams,
-} from './data/tournament'
+  isSupabaseConfigured,
+  supabaseConfigError,
+} from './lib/supabase'
+import {
+  deleteLineups,
+  getCurrentSession,
+  loadAdminAccess,
+  loadTournamentData,
+  loadVotes,
+  onAuthSessionChange,
+  saveLineup,
+  saveMatch,
+  saveMatchEvents,
+  savePlayer,
+  saveTeam,
+  saveVote,
+  signInAdmin,
+  signOutAdmin,
+} from './services/tournamentService'
 import {
   calculateStandings,
   getLeaderboards,
@@ -52,6 +64,7 @@ const navItems = [
   { id: 'admin', label: 'Admin', icon: Settings },
 ]
 
+const groups = ['A', 'B', 'C', 'D']
 const statIcons = [Users, ClipboardList, Goal, Timer]
 const maxSquadPlayers = 10
 const starterCount = 7
@@ -74,104 +87,12 @@ const positionOptions = [
   { label: 'FW', value: 'FW' },
   { label: 'WG', value: 'WG' },
 ]
-const storageKey = 'deir-hanna-world-cup-admin-data'
-const voteStorageKey = 'deir-hanna-world-cup-votes'
-const defaultTournamentData = {
-  teams: seedTeams,
-  players: seedPlayers,
-  matches: seedMatches,
-  knockoutMatches: seedKnockoutMatches,
-  lineups: seedLineups,
-}
-
-function sanitizeTournamentData(data) {
-  const playersByTeamCount = {}
-  const players = data.players
-    .slice()
-    .sort((a, b) => a.number - b.number)
-    .filter((player) => {
-      const count = playersByTeamCount[player.teamId] ?? 0
-
-      if (count >= maxSquadPlayers) {
-        return false
-      }
-
-      playersByTeamCount[player.teamId] = count + 1
-      return true
-    })
-  const allMatches = [...data.matches, ...data.knockoutMatches]
-  const lineups = allMatches.reduce((lineupMap, match) => {
-    if (!match.homeTeamId || !match.awayTeamId) {
-      return lineupMap
-    }
-
-    return {
-      ...lineupMap,
-      [match.id]: {
-        home: makeLineupForTeam(match.homeTeamId, players),
-        away: makeLineupForTeam(match.awayTeamId, players),
-      },
-    }
-  }, {})
-
-  return {
-    ...data,
-    lineups,
-    players,
-  }
-}
-
-function usePersistentTournamentData() {
-  const [data, setData] = useState(() => {
-    if (typeof window === 'undefined') {
-      return defaultTournamentData
-    }
-
-    try {
-      const storedData = window.localStorage.getItem(storageKey)
-
-      if (!storedData) {
-        return defaultTournamentData
-      }
-
-      const parsedData = JSON.parse(storedData)
-      const sanitizedData = sanitizeTournamentData({
-        ...defaultTournamentData,
-        ...parsedData,
-      })
-
-      return sanitizedData
-    } catch {
-      return defaultTournamentData
-    }
-  })
-
-  useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify(data))
-  }, [data])
-
-  return [data, setData]
-}
-
-function usePersistentVotes() {
-  const [votes, setVotes] = useState(() => {
-    if (typeof window === 'undefined') {
-      return {}
-    }
-
-    try {
-      const storedVotes = window.localStorage.getItem(voteStorageKey)
-      return storedVotes ? JSON.parse(storedVotes) : {}
-    } catch {
-      return {}
-    }
-  })
-
-  useEffect(() => {
-    window.localStorage.setItem(voteStorageKey, JSON.stringify(votes))
-  }, [votes])
-
-  return [votes, setVotes]
+const emptyTournamentData = {
+  teams: [],
+  players: [],
+  matches: [],
+  knockoutMatches: [],
+  lineups: {},
 }
 
 function slugify(value) {
@@ -217,11 +138,15 @@ function normalizeScore(value) {
 }
 
 function App() {
-  const [tournamentData, setTournamentData] = usePersistentTournamentData()
-  const [votes, setVotes] = usePersistentVotes()
+  const [tournamentData, setTournamentData] = useState(emptyTournamentData)
+  const [votes, setVotes] = useState({})
   const [activeView, setActiveView] = useState('overview')
   const [selectedGroup, setSelectedGroup] = useState('A')
+  const [session, setSession] = useState(null)
   const [adminUnlocked, setAdminUnlocked] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [appError, setAppError] = useState('')
+  const [authNotice, setAuthNotice] = useState('')
   const [selectedPlayerId, setSelectedPlayerId] = useState(null)
   const { teams, players, matches, knockoutMatches, lineups } = tournamentData
   const allMatches = useMemo(
@@ -251,209 +176,281 @@ function App() {
     [allMatches],
   )
 
-  function handleVote(matchId, choice) {
-    setVotes((currentVotes) => {
-      const matchVotes = currentVotes[matchId] ?? {
-        home: 0,
-        draw: 0,
-        away: 0,
-        userChoice: null,
-      }
+  const reloadTournament = useCallback(async ({ silent = false } = {}) => {
+    if (!isSupabaseConfigured) {
+      setLoading(false)
+      setAppError(supabaseConfigError)
+      return
+    }
 
-      if (matchVotes.userChoice === choice) {
-        return currentVotes
-      }
+    if (!silent) {
+      setLoading(true)
+    }
 
-      const nextMatchVotes = {
-        home: matchVotes.home ?? 0,
-        draw: matchVotes.draw ?? 0,
-        away: matchVotes.away ?? 0,
-        userChoice: choice,
-      }
+    try {
+      const [nextTournamentData, nextVotes] = await Promise.all([
+        loadTournamentData(),
+        loadVotes(),
+      ])
 
-      if (matchVotes.userChoice) {
-        nextMatchVotes[matchVotes.userChoice] = Math.max(
-          0,
-          nextMatchVotes[matchVotes.userChoice] - 1,
-        )
-      }
+      setTournamentData(nextTournamentData)
+      setVotes(nextVotes)
+      setAppError('')
+    } catch (error) {
+      setAppError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-      nextMatchVotes[choice] += 1
+  useEffect(() => {
+    async function loadInitialTournament() {
+      await reloadTournament()
+    }
 
-      return {
-        ...currentVotes,
-        [matchId]: nextMatchVotes,
-      }
+    loadInitialTournament()
+  }, [reloadTournament])
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      return undefined
+    }
+
+    let mounted = true
+
+    getCurrentSession()
+      .then((currentSession) => {
+        if (mounted) {
+          setSession(currentSession)
+        }
+      })
+      .catch((error) => setAppError(error.message))
+
+    const unsubscribe = onAuthSessionChange((nextSession) => {
+      setSession(nextSession)
+    })
+
+    return () => {
+      mounted = false
+      unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      return
+    }
+
+    loadAdminAccess(session)
+      .then(setAdminUnlocked)
+      .catch((error) => {
+        setAdminUnlocked(false)
+        setAppError(error.message)
+      })
+  }, [session])
+
+  async function runMutation(action) {
+    setAppError('')
+
+    try {
+      await action()
+      await reloadTournament({ silent: true })
+    } catch (error) {
+      setAppError(error.message)
+      throw error
+    }
+  }
+
+  async function handleVote(matchId, choice) {
+    const match = allMatches.find((item) => item.id === matchId)
+
+    if (!match) {
+      setAppError('Match not found.')
+      return
+    }
+
+    await runMutation(async () => {
+      await saveVote(match, choice)
     })
   }
 
-  function handleAddTeam(teamDraft) {
-    setTournamentData((currentData) => {
-      const id = makeUniqueId(
-        'team',
-        teamDraft.code || teamDraft.country,
-        new Set(currentData.teams.map((team) => team.id)),
-      )
+  async function handleAddTeam(teamDraft) {
+    const id = makeUniqueId(
+      'team',
+      teamDraft.code || teamDraft.country,
+      new Set(teams.map((team) => team.id)),
+    )
 
-      return {
-        ...currentData,
-        teams: [
-          ...currentData.teams,
-          {
-            id,
-            country: teamDraft.country.trim(),
-            code: teamDraft.code.trim().toUpperCase(),
-            group: teamDraft.group,
-            color: teamDraft.color,
-            secondary: teamDraft.secondary,
-          },
-        ],
-      }
-    })
-  }
-
-  function handleAddPlayer(playerDraft) {
-    setTournamentData((currentData) => {
-      const teamPlayerCount = currentData.players.filter(
-        (player) => player.teamId === playerDraft.teamId,
-      ).length
-
-      if (teamPlayerCount >= maxSquadPlayers) {
-        return currentData
-      }
-
-      const id = makeUniqueId(
-        'p',
-        `${playerDraft.teamId}-${playerDraft.name}`,
-        new Set(currentData.players.map((player) => player.id)),
-      )
-      const nextPlayers = [
-        ...currentData.players,
-        {
-          id,
-          name: playerDraft.name.trim(),
-          teamId: playerDraft.teamId,
-          number: Number(playerDraft.number),
-          position: playerDraft.position,
-          goals: 0,
-          assists: 0,
-          yellowCards: 0,
-          redCards: 0,
-        },
-      ]
-      const allCurrentMatches = [...currentData.matches, ...currentData.knockoutMatches]
-      const nextLineups = allCurrentMatches.reduce((lineupMap, match) => {
-        if (!lineupMap[match.id]) {
-          return lineupMap
-        }
-
-        const nextLineup = { ...lineupMap[match.id] }
-
-        if (match.homeTeamId === playerDraft.teamId) {
-          nextLineup.home = makeLineupForTeam(playerDraft.teamId, nextPlayers)
-        }
-
-        if (match.awayTeamId === playerDraft.teamId) {
-          nextLineup.away = makeLineupForTeam(playerDraft.teamId, nextPlayers)
-        }
-
-        return { ...lineupMap, [match.id]: nextLineup }
-      }, currentData.lineups)
-
-      return {
-        ...currentData,
-        lineups: nextLineups,
-        players: nextPlayers,
-      }
-    })
-  }
-
-  function handleSaveMatch(matchDraft) {
-    setTournamentData((currentData) => {
-      const match = {
-        ...matchDraft,
-        group: matchDraft.stage === 'Group' ? matchDraft.group : undefined,
-        matchday: Number(matchDraft.matchday),
-        homeTeamId: matchDraft.homeTeamId || undefined,
-        awayTeamId: matchDraft.awayTeamId || undefined,
-        homeScore: normalizeScore(matchDraft.homeScore),
-        awayScore: normalizeScore(matchDraft.awayScore),
-        minute: matchDraft.minute === '' ? undefined : Number(matchDraft.minute),
-      }
-      const targetKey = match.stage === 'Group' ? 'matches' : 'knockoutMatches'
-      const nextMatches = currentData.matches.filter((item) => item.id !== match.id)
-      const nextKnockoutMatches = currentData.knockoutMatches.filter(
-        (item) => item.id !== match.id,
-      )
-      const nextLineups = { ...currentData.lineups }
-
-      if (match.homeTeamId && match.awayTeamId) {
-        nextLineups[match.id] = {
-          home: makeLineupForTeam(match.homeTeamId, currentData.players),
-          away: makeLineupForTeam(match.awayTeamId, currentData.players),
-        }
-      } else {
-        delete nextLineups[match.id]
-      }
-
-      return {
-        ...currentData,
-        matches: targetKey === 'matches' ? [...nextMatches, match] : nextMatches,
-        knockoutMatches:
-          targetKey === 'knockoutMatches'
-            ? [...nextKnockoutMatches, match]
-            : nextKnockoutMatches,
-        lineups: nextLineups,
-      }
-    })
-  }
-
-  function handleAddMatch(matchDraft) {
-    setTournamentData((currentData) => {
-      const id = makeUniqueId(
-        'match',
-        `${matchDraft.homeTeamId}-${matchDraft.awayTeamId}-${matchDraft.date}`,
-        new Set(
-          [...currentData.matches, ...currentData.knockoutMatches].map((match) => match.id),
-        ),
-      )
-      const match = {
+    await runMutation(async () => {
+      await saveTeam({
         id,
-        stage: matchDraft.stage,
-        group: matchDraft.stage === 'Group' ? matchDraft.group : undefined,
-        matchday: Number(matchDraft.matchday),
-        date: matchDraft.date,
-        time: matchDraft.time,
-        venue: matchDraft.venue.trim(),
-        homeTeamId: matchDraft.homeTeamId || undefined,
-        awayTeamId: matchDraft.awayTeamId || undefined,
-        homeScore: normalizeScore(matchDraft.homeScore),
-        awayScore: normalizeScore(matchDraft.awayScore),
-        status: matchDraft.status,
-        minute: matchDraft.minute === '' ? undefined : Number(matchDraft.minute),
-      }
-      const key = match.stage === 'Group' ? 'matches' : 'knockoutMatches'
-
-      return {
-        ...currentData,
-        [key]: [...currentData[key], match],
-        lineups:
-          match.homeTeamId && match.awayTeamId
-            ? {
-                ...currentData.lineups,
-                [id]: {
-                  home: makeLineupForTeam(match.homeTeamId, currentData.players),
-                  away: makeLineupForTeam(match.awayTeamId, currentData.players),
-                },
-              }
-            : currentData.lineups,
-      }
+        country: teamDraft.country.trim(),
+        code: teamDraft.code.trim().toUpperCase(),
+        group: teamDraft.group,
+        color: teamDraft.color,
+        secondary: teamDraft.secondary,
+      })
     })
   }
 
-  function handleResetData() {
-    setTournamentData(defaultTournamentData)
-    window.localStorage.removeItem(storageKey)
+  async function handleAddPlayer(playerDraft) {
+    const teamPlayerCount = players.filter(
+      (player) => player.teamId === playerDraft.teamId,
+    ).length
+
+    if (teamPlayerCount >= maxSquadPlayers) {
+      return
+    }
+
+    const id = makeUniqueId(
+      'p',
+      `${playerDraft.teamId}-${playerDraft.name}`,
+      new Set(players.map((player) => player.id)),
+    )
+    const player = {
+      id,
+      name: playerDraft.name.trim(),
+      teamId: playerDraft.teamId,
+      number: Number(playerDraft.number),
+      position: playerDraft.position,
+      goals: 0,
+      assists: 0,
+      yellowCards: 0,
+      redCards: 0,
+    }
+    const nextPlayers = [...players, player]
+    const affectedMatches = allMatches.filter(
+      (match) =>
+        match.homeTeamId === playerDraft.teamId || match.awayTeamId === playerDraft.teamId,
+    )
+
+    await runMutation(async () => {
+      await savePlayer(player)
+
+      await Promise.all(
+        affectedMatches.flatMap((match) => {
+          const updates = []
+
+          if (match.homeTeamId === playerDraft.teamId) {
+            updates.push(saveLineup(match.id, 'home', makeLineupForTeam(playerDraft.teamId, nextPlayers)))
+          }
+
+          if (match.awayTeamId === playerDraft.teamId) {
+            updates.push(saveLineup(match.id, 'away', makeLineupForTeam(playerDraft.teamId, nextPlayers)))
+          }
+
+          return updates
+        }),
+      )
+    })
+  }
+
+  function normalizeMatchDraft(matchDraft) {
+    return {
+      ...matchDraft,
+      group: matchDraft.stage === 'Group' ? matchDraft.group : undefined,
+      matchday: Number(matchDraft.matchday),
+      homeTeamId: matchDraft.homeTeamId || undefined,
+      awayTeamId: matchDraft.awayTeamId || undefined,
+      homeScore: normalizeScore(matchDraft.homeScore),
+      awayScore: normalizeScore(matchDraft.awayScore),
+      minute: matchDraft.minute === '' ? undefined : Number(matchDraft.minute),
+      events: (matchDraft.events ?? []).map((event) => ({
+        ...event,
+        minute: Number(event.minute),
+        type: event.type ?? 'goal',
+      })),
+    }
+  }
+
+  async function saveMatchAndLineups(match) {
+    await saveMatch(match)
+    await saveMatchEvents(match.id, match.events ?? [])
+
+    if (match.homeTeamId && match.awayTeamId) {
+      await Promise.all([
+        saveLineup(match.id, 'home', makeLineupForTeam(match.homeTeamId, players)),
+        saveLineup(match.id, 'away', makeLineupForTeam(match.awayTeamId, players)),
+      ])
+    } else {
+      await deleteLineups(match.id)
+    }
+  }
+
+  async function handleSaveMatch(matchDraft) {
+    const match = normalizeMatchDraft(matchDraft)
+
+    await runMutation(async () => {
+      await saveMatchAndLineups(match)
+    })
+  }
+
+  async function handleAddMatch(matchDraft) {
+    const id = makeUniqueId(
+      'match',
+      `${matchDraft.homeTeamId}-${matchDraft.awayTeamId}-${matchDraft.date}`,
+      new Set(allMatches.map((match) => match.id)),
+    )
+    const match = normalizeMatchDraft({
+      ...matchDraft,
+      id,
+      venue: matchDraft.venue.trim(),
+      events: [],
+    })
+
+    await runMutation(async () => {
+      await saveMatchAndLineups(match)
+    })
+  }
+
+  async function handleSignIn(email) {
+    setAppError('')
+    setAuthNotice('')
+
+    try {
+      await signInAdmin(email)
+      setAuthNotice('Check your email for the Supabase login link.')
+    } catch (error) {
+      setAppError(error.message)
+    }
+  }
+
+  async function handleSignOut() {
+    setAppError('')
+
+    try {
+      await signOutAdmin()
+      setAdminUnlocked(false)
+      setAuthNotice('')
+    } catch (error) {
+      setAppError(error.message)
+    }
+  }
+
+  if (!isSupabaseConfigured) {
+    return (
+      <SetupState
+        detail="Create .env.local from .env.example and add VITE_SUPABASE_URL plus VITE_SUPABASE_ANON_KEY."
+        title="Supabase is not configured"
+      />
+    )
+  }
+
+  if (loading) {
+    return <LoadingState />
+  }
+
+  if (appError && (!teams.length || !allMatches.length)) {
+    return <SetupState detail={appError} title="Could not load tournament data" />
+  }
+
+  if (!teams.length || !allMatches.length) {
+    return (
+      <SetupState
+        detail="Run supabase/schema.sql in Supabase, generate seed SQL with npm run seed:sql, then run that output in the Supabase SQL editor."
+        title="No tournament data found"
+      />
+    )
   }
 
   return (
@@ -487,6 +484,7 @@ function App() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        {appError && <ErrorBanner message={appError} onDismiss={() => setAppError('')} />}
         {activeView === 'overview' && (
           <Overview
             knockoutMatches={knockoutMatches}
@@ -533,14 +531,16 @@ function App() {
         )}
         {activeView === 'admin' && (
           <AdminBoard
+            adminEmail={session?.user?.email}
             adminUnlocked={adminUnlocked}
             allMatches={allMatches}
-            setAdminUnlocked={setAdminUnlocked}
+            authNotice={authNotice}
             onAddMatch={handleAddMatch}
             onAddPlayer={handleAddPlayer}
             onAddTeam={handleAddTeam}
-            onResetData={handleResetData}
             onSaveMatch={handleSaveMatch}
+            onSignIn={handleSignIn}
+            onSignOut={handleSignOut}
             players={players}
             teams={teams}
           />
@@ -595,6 +595,53 @@ function Header({ activeView, setActiveView }) {
         </nav>
       </div>
     </header>
+  )
+}
+
+function SetupState({ detail, title }) {
+  return (
+    <main className="min-h-screen bg-[#f6f7f2] px-4 py-10 text-[#14201b]">
+      <section className="mx-auto max-w-2xl rounded-lg border border-[#dce1d7] bg-white p-6 shadow-sm">
+        <div className="mb-4 grid h-11 w-11 place-items-center rounded-lg bg-[#eef3e9] text-[#1f6d4d]">
+          <Settings className="h-5 w-5" />
+        </div>
+        <h1 className="text-2xl font-semibold">{title}</h1>
+        <p className="mt-3 text-sm leading-6 text-[#65756b]">{detail}</p>
+        <div className="mt-5 rounded-md bg-[#f8faf5] p-4 text-sm text-[#34433a]">
+          Required setup: create the Supabase project, run `supabase/schema.sql`, add your
+          admin email to `admin_users`, then seed the database.
+        </div>
+      </section>
+    </main>
+  )
+}
+
+function LoadingState() {
+  return (
+    <main className="grid min-h-screen place-items-center bg-[#f6f7f2] px-4 text-[#14201b]">
+      <section className="rounded-lg border border-[#dce1d7] bg-white p-6 text-center shadow-sm">
+        <div className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-lg bg-[#eef3e9] text-[#1f6d4d]">
+          <Timer className="h-5 w-5" />
+        </div>
+        <h1 className="text-xl font-semibold">Loading tournament data</h1>
+        <p className="mt-2 text-sm text-[#65756b]">Connecting to Supabase.</p>
+      </section>
+    </main>
+  )
+}
+
+function ErrorBanner({ message, onDismiss }) {
+  return (
+    <div className="mb-4 flex flex-col gap-3 rounded-lg border border-[#e4b4b4] bg-[#fff7f7] p-4 text-sm text-[#7b2b2b] sm:flex-row sm:items-center sm:justify-between">
+      <span>{message}</span>
+      <button
+        type="button"
+        className="rounded-md border border-[#e4b4b4] bg-white px-3 py-1.5 text-xs font-semibold"
+        onClick={onDismiss}
+      >
+        Dismiss
+      </button>
+    </div>
   )
 }
 
@@ -2284,6 +2331,13 @@ function matchToAdminDraft(match) {
 
   return {
     ...match,
+    events: (match.events ?? []).map((event) => ({
+      minute: event.minute,
+      type: event.type ?? 'goal',
+      teamId: event.teamId ?? '',
+      player: event.player ?? '',
+      assist: event.assist ?? '',
+    })),
     group: match.group ?? 'A',
     matchday: match.matchday ?? 1,
     homeTeamId: match.homeTeamId ?? '',
@@ -2295,17 +2349,20 @@ function matchToAdminDraft(match) {
 }
 
 function AdminBoard({
+  adminEmail,
   adminUnlocked,
   allMatches,
+  authNotice,
   onAddMatch,
   onAddPlayer,
   onAddTeam,
-  onResetData,
   onSaveMatch,
+  onSignIn,
+  onSignOut,
   players,
-  setAdminUnlocked,
   teams,
 }) {
+  const [adminEmailDraft, setAdminEmailDraft] = useState('')
   const [teamDraft, setTeamDraft] = useState({
     country: '',
     code: '',
@@ -2348,25 +2405,35 @@ function AdminBoard({
   })
   const disabled = !adminUnlocked
 
-  function submitTeam(event) {
+  async function submitAdminLogin(event) {
+    event.preventDefault()
+
+    if (!adminEmailDraft.trim()) {
+      return
+    }
+
+    await onSignIn(adminEmailDraft.trim())
+  }
+
+  async function submitTeam(event) {
     event.preventDefault()
 
     if (!teamDraft.country.trim() || !teamDraft.code.trim()) {
       return
     }
 
-    onAddTeam(teamDraft)
+    await onAddTeam(teamDraft)
     setTeamDraft((draft) => ({ ...draft, country: '', code: '' }))
   }
 
-  function submitPlayer(event) {
+  async function submitPlayer(event) {
     event.preventDefault()
 
     if (!playerDraft.name.trim() || !effectivePlayerTeamId) {
       return
     }
 
-    onAddPlayer({ ...playerDraft, teamId: effectivePlayerTeamId })
+    await onAddPlayer({ ...playerDraft, teamId: effectivePlayerTeamId })
     setPlayerDraft((draft) => ({
       ...draft,
       name: '',
@@ -2374,9 +2441,9 @@ function AdminBoard({
     }))
   }
 
-  function submitNewMatch(event) {
+  async function submitNewMatch(event) {
     event.preventDefault()
-    onAddMatch(newMatchDraft)
+    await onAddMatch(newMatchDraft)
     setNewMatchDraft(createNewMatchDraft(teams))
   }
 
@@ -2386,30 +2453,49 @@ function AdminBoard({
         <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
           <PanelHeader icon={LockKeyhole} title="Admin Access" detail="Control panel" />
           <div className="grid gap-4 border-t border-[#e5e9e0] p-4">
-            <label className="grid gap-2 text-sm font-medium text-[#34433a]">
-              Admin code
-              <input
-                className="min-h-11 rounded-md border border-[#d4dace] bg-[#fbfdf9] px-3 outline-none transition focus:border-[#1f6d4d] focus:ring-2 focus:ring-[#b8dcc7]"
-                placeholder="Tournament PIN"
-                type="password"
-              />
-            </label>
-            <button
-              type="button"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#163428] px-4 text-sm font-semibold text-white"
-              onClick={() => setAdminUnlocked((value) => !value)}
-            >
-              <LockKeyhole className="h-4 w-4" />
-              {adminUnlocked ? 'Lock panel' : 'Unlock demo'}
-            </button>
-            <button
-              type="button"
-              className="inline-flex min-h-11 items-center justify-center rounded-md border border-[#d4dace] bg-white px-4 text-sm font-semibold text-[#34433a]"
-              disabled={disabled}
-              onClick={onResetData}
-            >
-              Reset data
-            </button>
+            {adminEmail ? (
+              <div className="grid gap-3">
+                <div className="rounded-md bg-[#eef3e9] px-3 py-3 text-sm text-[#34433a]">
+                  Signed in as {adminEmail}
+                  <span className="mt-1 block text-xs text-[#65756b]">
+                    {adminUnlocked
+                      ? 'Admin access confirmed.'
+                      : 'This email is signed in but is not listed in admin_users.'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-[#d4dace] bg-white px-4 text-sm font-semibold text-[#34433a]"
+                  onClick={onSignOut}
+                >
+                  <LockKeyhole className="h-4 w-4" />
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <form className="grid gap-3" onSubmit={submitAdminLogin}>
+                <AdminTextInput
+                  disabled={false}
+                  label="Admin email"
+                  onChange={setAdminEmailDraft}
+                  placeholder="name@example.com"
+                  type="email"
+                  value={adminEmailDraft}
+                />
+                <button
+                  type="submit"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#163428] px-4 text-sm font-semibold text-white"
+                >
+                  <LockKeyhole className="h-4 w-4" />
+                  Send login link
+                </button>
+              </form>
+            )}
+            {authNotice && (
+              <div className="rounded-md bg-[#f8faf5] px-3 py-3 text-sm text-[#34433a]">
+                {authNotice}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <AdminMetric label="Teams" value={teams.length} />
               <AdminMetric label="Players" value={players.length} />
@@ -2670,14 +2756,14 @@ function EditMatchForm({
 }) {
   const [draft, setDraft] = useState(() => matchToAdminDraft(match))
 
-  function submitEditMatch(event) {
+  async function submitEditMatch(event) {
     event.preventDefault()
 
     if (!draft) {
       return
     }
 
-    onSaveMatch(draft)
+    await onSaveMatch(draft)
   }
 
   return (
@@ -2697,8 +2783,126 @@ function EditMatchForm({
           teamOptions={teamOptions}
         />
       )}
+      {draft && (
+        <MatchEventsEditor
+          disabled={disabled}
+          draft={draft}
+          setDraft={setDraft}
+          teamOptions={teamOptions}
+        />
+      )}
       <AdminSubmit disabled={disabled || !draft} icon={Save} label="Save match" />
     </form>
+  )
+}
+
+function MatchEventsEditor({ disabled, draft, setDraft, teamOptions }) {
+  const events = draft.events ?? []
+  const eventTeamOptions = [{ label: 'Select team', value: '' }, ...teamOptions]
+
+  function updateEvent(index, field, value) {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      events: (currentDraft.events ?? []).map((event, eventIndex) =>
+        eventIndex === index ? { ...event, [field]: value } : event,
+      ),
+    }))
+  }
+
+  function addEvent() {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      events: [
+        ...(currentDraft.events ?? []),
+        {
+          minute: '',
+          type: 'goal',
+          teamId: currentDraft.homeTeamId ?? '',
+          player: '',
+          assist: '',
+        },
+      ],
+    }))
+  }
+
+  function removeEvent(index) {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      events: (currentDraft.events ?? []).filter((_event, eventIndex) => eventIndex !== index),
+    }))
+  }
+
+  return (
+    <section className="rounded-lg border border-[#dce1d7] bg-[#fbfdf9] p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-[#14201b]">Scorers & Assists</h3>
+          <p className="text-xs text-[#65756b]">Saved as match events</p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex min-h-9 items-center justify-center rounded-md border border-[#d4dace] bg-white px-3 text-xs font-semibold text-[#34433a]"
+          disabled={disabled}
+          onClick={addEvent}
+        >
+          Add goal
+        </button>
+      </div>
+      <div className="grid gap-3">
+        {events.length ? (
+          events.map((event, index) => (
+            <div
+              key={`event-${index}`}
+              className="grid gap-3 rounded-md border border-[#dce1d7] bg-white p-3"
+            >
+              <FieldGrid>
+                <AdminTextInput
+                  disabled={disabled}
+                  label="Minute"
+                  min="1"
+                  onChange={(value) => updateEvent(index, 'minute', value)}
+                  type="number"
+                  value={event.minute}
+                />
+                <AdminSelect
+                  disabled={disabled}
+                  label="Team"
+                  onChange={(value) => updateEvent(index, 'teamId', value)}
+                  options={eventTeamOptions}
+                  value={event.teamId}
+                />
+              </FieldGrid>
+              <FieldGrid>
+                <AdminTextInput
+                  disabled={disabled}
+                  label="Scorer"
+                  onChange={(value) => updateEvent(index, 'player', value)}
+                  placeholder="Player name"
+                  value={event.player}
+                />
+                <AdminTextInput
+                  disabled={disabled}
+                  label="Assist"
+                  onChange={(value) => updateEvent(index, 'assist', value)}
+                  placeholder="Leave empty if unassisted"
+                  value={event.assist}
+                />
+              </FieldGrid>
+              <button
+                type="button"
+                className="justify-self-start rounded-md border border-[#d4dace] bg-white px-3 py-2 text-xs font-semibold text-[#34433a] disabled:opacity-45"
+                disabled={disabled}
+                onClick={() => removeEvent(index)}
+              >
+                Remove
+              </button>
+            </div>
+          ))
+        ) : (
+          <EmptyState text="No goal events recorded for this match." />
+        )}
+      </div>
+    </section>
   )
 }
 
