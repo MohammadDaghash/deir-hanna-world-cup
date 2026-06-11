@@ -26,3 +26,4 @@ supabase/seed.generated.sql
 *.njsproj
 *.sln
 *.sw?
+.vercel
