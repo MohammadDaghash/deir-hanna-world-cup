@@ -94,6 +94,32 @@ create table if not exists public.match_votes (
   primary key (match_id, viewer_id)
 );
 
+create table if not exists public.tournament_votes (
+  vote_type text not null check (vote_type in ('tournament_winner', 'top_scorer', 'best_player')),
+  candidate_id text not null,
+  viewer_id uuid not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (vote_type, viewer_id)
+);
+
+create table if not exists public.player_match_stats (
+  player_id text not null references public.players(id) on delete cascade,
+  match_id text not null references public.matches(id) on delete cascade,
+  minutes int not null default 0,
+  shots int not null default 0,
+  pass_accuracy int,
+  tackles int not null default 0,
+  saves int not null default 0,
+  goals int not null default 0,
+  assists int not null default 0,
+  yellow_cards int not null default 0,
+  red_cards int not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (player_id, match_id)
+);
+
 create or replace function public.is_admin()
 returns boolean
 language sql
@@ -162,6 +188,16 @@ create trigger set_match_votes_updated_at
 before update on public.match_votes
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_tournament_votes_updated_at on public.tournament_votes;
+create trigger set_tournament_votes_updated_at
+before update on public.tournament_votes
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_player_match_stats_updated_at on public.player_match_stats;
+create trigger set_player_match_stats_updated_at
+before update on public.player_match_stats
+for each row execute function public.set_updated_at();
+
 drop trigger if exists validate_match_vote_choice on public.match_votes;
 create trigger validate_match_vote_choice
 before insert or update on public.match_votes
@@ -175,6 +211,8 @@ alter table public.match_events enable row level security;
 alter table public.lineups enable row level security;
 alter table public.lineup_players enable row level security;
 alter table public.match_votes enable row level security;
+alter table public.tournament_votes enable row level security;
+alter table public.player_match_stats enable row level security;
 
 drop policy if exists "Admins can read themselves" on public.admin_users;
 create policy "Admins can read themselves"
@@ -217,3 +255,15 @@ drop policy if exists "Public can insert votes" on public.match_votes;
 create policy "Public can insert votes" on public.match_votes for insert with check (true);
 drop policy if exists "Public can update votes" on public.match_votes;
 create policy "Public can update votes" on public.match_votes for update using (true) with check (true);
+
+drop policy if exists "Public can read tournament votes" on public.tournament_votes;
+create policy "Public can read tournament votes" on public.tournament_votes for select using (true);
+drop policy if exists "Public can insert tournament votes" on public.tournament_votes;
+create policy "Public can insert tournament votes" on public.tournament_votes for insert with check (true);
+drop policy if exists "Public can update tournament votes" on public.tournament_votes;
+create policy "Public can update tournament votes" on public.tournament_votes for update using (true) with check (true);
+
+drop policy if exists "Public can read player match stats" on public.player_match_stats;
+create policy "Public can read player match stats" on public.player_match_stats for select using (true);
+drop policy if exists "Admins can write player match stats" on public.player_match_stats;
+create policy "Admins can write player match stats" on public.player_match_stats for all using (public.is_admin()) with check (public.is_admin());

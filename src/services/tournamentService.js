@@ -81,6 +81,21 @@ function emptyVotes() {
   return { home: 0, draw: 0, away: 0, userChoice: null }
 }
 
+function emptyTournamentVoteBucket() {
+  return { total: 0, candidates: {}, userChoice: null }
+}
+
+function isMissingOptionalTable(error) {
+  const message = error?.message?.toLowerCase() ?? ''
+
+  return (
+    error?.code === '42P01' ||
+    error?.code === 'PGRST205' ||
+    message.includes('does not exist') ||
+    message.includes('schema cache')
+  )
+}
+
 export function getViewerId() {
   if (typeof window === 'undefined') {
     return '00000000-0000-4000-8000-000000000000'
@@ -185,6 +200,38 @@ export async function loadVotes() {
 
     if (vote.viewer_id === viewerId) {
       votes[vote.match_id].userChoice = vote.choice
+    }
+
+    return votes
+  }, {})
+}
+
+export async function loadTournamentVotes() {
+  const client = requireSupabase()
+  const viewerId = getViewerId()
+  const { data, error } = await client
+    .from('tournament_votes')
+    .select('vote_type, candidate_id, viewer_id')
+
+  if (error) {
+    if (isMissingOptionalTable(error)) {
+      return {}
+    }
+
+    throwIfError(error)
+  }
+
+  return data.reduce((votes, vote) => {
+    if (!votes[vote.vote_type]) {
+      votes[vote.vote_type] = emptyTournamentVoteBucket()
+    }
+
+    const bucket = votes[vote.vote_type]
+    bucket.total += 1
+    bucket.candidates[vote.candidate_id] = (bucket.candidates[vote.candidate_id] ?? 0) + 1
+
+    if (vote.viewer_id === viewerId) {
+      bucket.userChoice = vote.candidate_id
     }
 
     return votes
@@ -341,6 +388,24 @@ export async function saveVote(match, choice) {
     },
     { onConflict: 'match_id,viewer_id' },
   )
+
+  throwIfError(error)
+}
+
+export async function saveTournamentVote(voteType, candidateId) {
+  const client = requireSupabase()
+  const { error } = await client.from('tournament_votes').upsert(
+    {
+      vote_type: voteType,
+      candidate_id: candidateId,
+      viewer_id: getViewerId(),
+    },
+    { onConflict: 'vote_type,viewer_id' },
+  )
+
+  if (isMissingOptionalTable(error)) {
+    throw new Error('Tournament-wide voting needs the latest supabase/schema.sql migration.')
+  }
 
   throwIfError(error)
 }

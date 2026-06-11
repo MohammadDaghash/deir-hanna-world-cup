@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
+  ArrowLeft,
   BarChart3,
+  Bell,
   CalendarDays,
-  CircleDot,
+  ChevronDown,
   ClipboardList,
   Clock,
+  Expand,
   Goal,
   LockKeyhole,
   Medal,
@@ -14,10 +17,13 @@ import {
   Save,
   Settings,
   ShieldCheck,
+  Share2,
   Smartphone,
+  Star,
   Table2,
   Timer,
   Trophy,
+  UserRound,
   Users,
   X,
   Search,
@@ -32,6 +38,7 @@ import {
   getCurrentSession,
   loadAdminAccess,
   loadTournamentData,
+  loadTournamentVotes,
   loadVotes,
   onAuthSessionChange,
   saveLineup,
@@ -39,6 +46,7 @@ import {
   saveMatchEvents,
   savePlayer,
   saveTeam,
+  saveTournamentVote,
   saveVote,
   signInAdmin,
   signOutAdmin,
@@ -59,8 +67,9 @@ const navItems = [
   { id: 'overview', label: 'Overview', icon: Activity },
   { id: 'teams', label: 'Teams', icon: Users },
   { id: 'matches', label: 'Matches', icon: CalendarDays },
-  { id: 'tables', label: 'Tables', icon: Table2 },
-  { id: 'leaders', label: 'Leaders', icon: Medal },
+  { id: 'tables', label: 'Standings', icon: Table2 },
+  { id: 'knockout', label: 'Knockout', icon: Trophy },
+  { id: 'leaders', label: 'Stats', icon: Medal },
   { id: 'admin', label: 'Admin', icon: Settings },
 ]
 
@@ -93,6 +102,59 @@ const emptyTournamentData = {
   matches: [],
   knockoutMatches: [],
   lineups: {},
+}
+const matchFilterModes = [
+  { id: 'date', label: 'By date' },
+  { id: 'group', label: 'By group' },
+  { id: 'round', label: 'By round' },
+  { id: 'team', label: 'By team' },
+]
+const roundFilterOptions = [
+  { id: 'group-1', label: 'Group Stage Round 1' },
+  { id: 'group-2', label: 'Group Stage Round 2' },
+  { id: 'group-3', label: 'Group Stage Round 3' },
+  { id: 'Quarter-final', label: 'Quarter-finals' },
+  { id: 'Semi-final', label: 'Semi-finals' },
+  { id: 'Third place', label: 'Third Place' },
+  { id: 'Final', label: 'Final' },
+]
+const knockoutStageFilters = [
+  { id: 'Quarter-final', label: 'Quarter-finals' },
+  { id: 'Semi-final', label: 'Semi-finals' },
+  { id: 'Third place', label: 'Third Place' },
+  { id: 'Final', label: 'Final' },
+]
+const detailTabs = ['Details', 'Lineups', 'Standings', 'Matches']
+const teamPageTabs = ['Matches', 'Standings', 'Players', 'Statistics']
+function parseHashRoute() {
+  if (typeof window === 'undefined') {
+    return { type: 'main' }
+  }
+
+  const hash = window.location.hash.replace(/^#\/?/, '')
+  const [type, id] = hash.split('/')
+
+  if (['match', 'team', 'player'].includes(type) && id) {
+    return { type, id: decodeURIComponent(id) }
+  }
+
+  return { type: 'main' }
+}
+
+function setHashRoute(type, id) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.location.hash = `#/${type}/${encodeURIComponent(id)}`
+}
+
+function clearHashRoute() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.history.pushState('', document.title, window.location.pathname + window.location.search)
 }
 
 function slugify(value) {
@@ -137,9 +199,170 @@ function normalizeScore(value) {
   return Number(value)
 }
 
+function compareMatchDate(a, b) {
+  return `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)
+}
+
+function formatLongDate(value) {
+  return new Intl.DateTimeFormat('en', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(`${value}T12:00:00`))
+}
+
+function formatTournamentYear(matches) {
+  const firstMatch = [...matches].sort(compareMatchDate)[0]
+  return firstMatch?.date ? new Date(`${firstMatch.date}T12:00:00`).getFullYear() : 2026
+}
+
+function getCurrentStage(matches) {
+  const live = matches.find((match) => match.status === 'live')
+  if (live) return live.stage === 'Group' ? 'Group stage' : live.stage
+
+  const upcoming = getUpcomingMatches(matches)[0]
+  if (upcoming) return upcoming.stage === 'Group' ? 'Group stage' : upcoming.stage
+
+  return 'Completed'
+}
+
+function getMatchRoundLabel(match) {
+  if (match.stage === 'Group') {
+    return `Round ${match.matchday ?? 1}`
+  }
+
+  if (match.stage === 'Quarter-final') return 'Quarter-finals'
+  if (match.stage === 'Semi-final') return 'Semi-finals'
+  if (match.stage === 'Third place') return 'Third Place'
+  return match.stage
+}
+
+function getMatchCompetitionLabel(match) {
+  if (match.stage === 'Group') {
+    return `Deir Hanna World Cup, Group ${match.group}`
+  }
+
+  return `Deir Hanna World Cup, ${getMatchRoundLabel(match)}`
+}
+
+function matchBelongsToRound(match, roundId) {
+  if (roundId.startsWith('group-')) {
+    return match.stage === 'Group' && Number(match.matchday ?? 1) === Number(roundId.replace('group-', ''))
+  }
+
+  return match.stage === roundId
+}
+
+function getRoundOptionLabel(roundId) {
+  return roundFilterOptions.find((round) => round.id === roundId)?.label ?? roundId
+}
+
+function groupMatches(matches, getGroup) {
+  const grouped = matches.reduce((sections, match) => {
+    const key = getGroup(match)
+    if (!sections[key]) {
+      sections[key] = []
+    }
+
+    sections[key].push(match)
+    return sections
+  }, {})
+
+  return Object.entries(grouped).map(([title, sectionMatches]) => ({
+    title,
+    matches: sectionMatches.sort(compareMatchDate),
+  }))
+}
+
+function getTeamMatches(allMatches, teamId) {
+  return allMatches
+    .filter((match) => match.homeTeamId === teamId || match.awayTeamId === teamId)
+    .sort(compareMatchDate)
+}
+
+function getTeamStandingRow(standings, teamId) {
+  return Object.values(standings)
+    .flat()
+    .find((row) => row.team.id === teamId)
+}
+
+function getTeamRecord(allMatches, teamId) {
+  return getTeamMatches(allMatches, teamId)
+    .filter(isScoredMatch)
+    .reduce(
+      (record, match) => {
+        const isHome = match.homeTeamId === teamId
+        const ownGoals = isHome ? match.homeScore : match.awayScore
+        const againstGoals = isHome ? match.awayScore : match.homeScore
+
+        record.played += 1
+        record.goalsFor += ownGoals
+        record.goalsAgainst += againstGoals
+
+        if (ownGoals > againstGoals) record.wins += 1
+        else if (ownGoals < againstGoals) record.losses += 1
+        else record.draws += 1
+
+        return record
+      },
+      { played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 },
+    )
+}
+
+function getTeamForm(allMatches, teamId) {
+  return getTeamMatches(allMatches, teamId)
+    .filter(isScoredMatch)
+    .slice(-5)
+    .map((match) => {
+      const isHome = match.homeTeamId === teamId
+      const ownGoals = isHome ? match.homeScore : match.awayScore
+      const againstGoals = isHome ? match.awayScore : match.homeScore
+
+      if (ownGoals > againstGoals) return 'W'
+      if (ownGoals < againstGoals) return 'L'
+      return 'D'
+    })
+}
+
+function getPlayerTeam(player, teams) {
+  return teams.find((team) => team.id === player?.teamId)
+}
+
+function getPlayerContributions(player, allMatches) {
+  return allMatches
+    .flatMap((match) =>
+      (match.events ?? [])
+        .filter((event) => event.player === player.name || event.assist === player.name)
+        .map((event) => ({
+          ...event,
+          match,
+          contribution: event.player === player.name ? 'Goal' : 'Assist',
+        })),
+    )
+    .sort((a, b) => `${b.match.date} ${b.minute}`.localeCompare(`${a.match.date} ${a.minute}`))
+}
+
+function getVotePercent(count, total) {
+  return total ? Math.round((count / total) * 100) : 0
+}
+
+function getCandidateVoteData(tournamentVotes, voteType, candidateId) {
+  const bucket = tournamentVotes[voteType] ?? { total: 0, candidates: {}, userChoice: null }
+  const votes = bucket.candidates?.[candidateId] ?? 0
+
+  return {
+    active: bucket.userChoice === candidateId,
+    percent: getVotePercent(votes, bucket.total),
+    total: bucket.total,
+    votes,
+  }
+}
+
 function App() {
   const [tournamentData, setTournamentData] = useState(emptyTournamentData)
   const [votes, setVotes] = useState({})
+  const [tournamentVotes, setTournamentVotes] = useState({})
+  const [route, setRoute] = useState(() => parseHashRoute())
   const [activeView, setActiveView] = useState('overview')
   const [selectedGroup, setSelectedGroup] = useState('A')
   const [session, setSession] = useState(null)
@@ -147,7 +370,6 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [appError, setAppError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
-  const [selectedPlayerId, setSelectedPlayerId] = useState(null)
   const { teams, players, matches, knockoutMatches, lineups } = tournamentData
   const allMatches = useMemo(
     () => [...matches, ...knockoutMatches],
@@ -188,13 +410,15 @@ function App() {
     }
 
     try {
-      const [nextTournamentData, nextVotes] = await Promise.all([
+      const [nextTournamentData, nextVotes, nextTournamentVotes] = await Promise.all([
         loadTournamentData(),
         loadVotes(),
+        loadTournamentVotes(),
       ])
 
       setTournamentData(nextTournamentData)
       setVotes(nextVotes)
+      setTournamentVotes(nextTournamentVotes)
       setAppError('')
     } catch (error) {
       setAppError(error.message)
@@ -210,6 +434,15 @@ function App() {
 
     loadInitialTournament()
   }, [reloadTournament])
+
+  useEffect(() => {
+    function handleHashChange() {
+      setRoute(parseHashRoute())
+    }
+
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -272,6 +505,30 @@ function App() {
     await runMutation(async () => {
       await saveVote(match, choice)
     })
+  }
+
+  async function handleTournamentVote(voteType, candidateId) {
+    await runMutation(async () => {
+      await saveTournamentVote(voteType, candidateId)
+    })
+  }
+
+  function handleViewSelect(viewId) {
+    clearHashRoute()
+    setRoute({ type: 'main' })
+    setActiveView(viewId)
+  }
+
+  function openMatch(matchId) {
+    setHashRoute('match', matchId)
+  }
+
+  function openTeam(teamId) {
+    setHashRoute('team', teamId)
+  }
+
+  function openPlayer(playerId) {
+    setHashRoute('player', playerId)
   }
 
   async function handleAddTeam(teamDraft) {
@@ -453,83 +710,125 @@ function App() {
     )
   }
 
+  const routeMatch = route.type === 'match'
+    ? allMatches.find((match) => match.id === route.id)
+    : null
+  const routeTeam = route.type === 'team'
+    ? teams.find((team) => team.id === route.id)
+    : null
+  const routePlayer = route.type === 'player'
+    ? playersById[route.id]
+    : null
+  const isDetailRoute = route.type !== 'main'
+
   return (
     <main className="min-h-screen bg-[#f6f7f2] text-[#14201b]">
-      <Header activeView={activeView} setActiveView={setActiveView} />
+      <Header activeView={activeView} onViewSelect={handleViewSelect} />
 
-      <section className="border-b border-[#dce1d7] bg-[#163428] text-white">
-        <div className="mx-auto grid w-full max-w-7xl min-w-0 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:px-8">
-          <div className="flex min-w-0 flex-col justify-between gap-5">
-            <div className="flex flex-wrap items-center gap-3 text-sm text-[#cfe7d8]">
-              <span className="inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 py-1">
-                <CircleDot className="h-4 w-4 text-[#ffdb70]" />
-                Group stage
-              </span>
-              <span>{teams.length} teams</span>
-              <span>{groups.length} groups</span>
-              <span>Top 2 qualify</span>
-            </div>
-            <div>
-              <h1 className="max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl">
-                Deir Hanna Local World Cup
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-[#d8eadf] sm:text-base">
-                Tournament control board for fixtures, live scores, group tables,
-                player rankings, and the knockout path.
-              </p>
-            </div>
-          </div>
-          <LiveMatch match={liveMatch} teams={teams} />
-        </div>
-      </section>
+      {!isDetailRoute && (
+        <TournamentHeader
+          allMatches={allMatches}
+          liveMatch={liveMatch}
+          stats={stats}
+          teams={teams}
+        />
+      )}
 
       <section className="mx-auto w-full max-w-7xl min-w-0 px-4 py-6 sm:px-6 lg:px-8">
         {appError && <ErrorBanner message={appError} onDismiss={() => setAppError('')} />}
-        {activeView === 'overview' && (
+        {route.type === 'match' && routeMatch && (
+          <MatchCenterPage
+            allMatches={allMatches}
+            lineups={lineups}
+            match={routeMatch}
+            onBack={() => handleViewSelect('matches')}
+            onTeamSelect={openTeam}
+            onVote={handleVote}
+            playersById={playersById}
+            standings={standings}
+            teams={teams}
+            votes={votes}
+          />
+        )}
+        {route.type === 'team' && routeTeam && (
+          <TeamPage
+            allMatches={allMatches}
+            onBack={() => handleViewSelect('teams')}
+            onMatchSelect={openMatch}
+            onPlayerSelect={openPlayer}
+            players={playersByTeam[routeTeam.id] ?? []}
+            standings={standings}
+            team={routeTeam}
+            teams={teams}
+          />
+        )}
+        {route.type === 'player' && routePlayer && (
+          <PlayerPage
+            allMatches={allMatches}
+            onBack={() => handleViewSelect('leaders')}
+            onMatchSelect={openMatch}
+            onTeamSelect={openTeam}
+            player={routePlayer}
+            teams={teams}
+          />
+        )}
+        {isDetailRoute && !routeMatch && !routeTeam && !routePlayer && (
+          <NotFoundPanel onBack={() => handleViewSelect('overview')} />
+        )}
+        {!isDetailRoute && activeView === 'overview' && (
           <Overview
+            allMatches={allMatches}
             knockoutMatches={knockoutMatches}
             leaderboards={leaderboards}
             latestResults={latestResults}
             lineups={lineups}
             liveMatch={liveMatch}
-            onPlayerSelect={setSelectedPlayerId}
+            onMatchSelect={openMatch}
+            onPlayerSelect={openPlayer}
+            onTeamSelect={openTeam}
+            onTournamentVote={handleTournamentVote}
             onVote={handleVote}
             playersById={playersById}
             standings={standings}
             stats={stats}
             teams={teams}
+            tournamentVotes={tournamentVotes}
             upcomingMatches={upcomingMatches}
             votes={votes}
           />
         )}
-        {activeView === 'teams' && (
+        {!isDetailRoute && activeView === 'teams' && (
           <TeamsBoard
-            onPlayerSelect={setSelectedPlayerId}
+            onTeamSelect={openTeam}
             playersByTeam={playersByTeam}
             teams={teams}
           />
         )}
-        {activeView === 'matches' && (
+        {!isDetailRoute && activeView === 'matches' && (
           <MatchesBoard
             lineups={lineups}
             matches={allMatches}
+            onMatchSelect={openMatch}
             onVote={handleVote}
             playersById={playersById}
             teams={teams}
             votes={votes}
           />
         )}
-        {activeView === 'tables' && (
+        {!isDetailRoute && activeView === 'tables' && (
           <TablesBoard
             selectedGroup={selectedGroup}
             setSelectedGroup={setSelectedGroup}
             standings={standings}
           />
         )}
-        {activeView === 'leaders' && (
-          <LeadersBoard leaderboards={leaderboards} onPlayerSelect={setSelectedPlayerId} />
+        {!isDetailRoute && activeView === 'knockout' && (
+          <KnockoutBoard matches={knockoutMatches} onMatchSelect={openMatch} teams={teams} />
         )}
-        {activeView === 'admin' && (
+        {!isDetailRoute && activeView === 'leaders' && (
+          <LeadersBoard leaderboards={leaderboards} onPlayerSelect={openPlayer} />
+        )}
+        {!isDetailRoute && activeView === 'admin' && (
           <AdminBoard
             adminEmail={session?.user?.email}
             adminUnlocked={adminUnlocked}
@@ -546,17 +845,11 @@ function App() {
           />
         )}
       </section>
-      <PlayerDetailsModal
-        allMatches={allMatches}
-        onClose={() => setSelectedPlayerId(null)}
-        player={playersById[selectedPlayerId]}
-        teams={teams}
-      />
     </main>
   )
 }
 
-function Header({ activeView, setActiveView }) {
+function Header({ activeView, onViewSelect }) {
   return (
     <header className="sticky top-0 z-20 border-b border-[#dce1d7] bg-[#f6f7f2]/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
@@ -571,7 +864,7 @@ function Header({ activeView, setActiveView }) {
             <p className="truncate text-xs text-[#65756b]">Local tournament dashboard</p>
           </div>
         </div>
-        <nav className="flex min-w-0 flex-wrap gap-2 pb-1 lg:flex-nowrap lg:pb-0" aria-label="Main views">
+        <nav className="scrollbar-none -mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:pb-0" aria-label="Main views">
           {navItems.map((item) => {
             const Icon = item.icon
             const isActive = activeView === item.id
@@ -580,12 +873,12 @@ function Header({ activeView, setActiveView }) {
               <button
                 key={item.id}
                 type="button"
-                className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-medium transition ${
+                className={`relative inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold transition ${
                   isActive
-                    ? 'border-[#163428] bg-[#163428] text-white'
-                    : 'border-[#d4dace] bg-white text-[#34433a] hover:border-[#9cb4a5]'
+                    ? 'bg-white text-[#14201b] shadow-sm after:absolute after:inset-x-3 after:-bottom-1 after:h-0.5 after:rounded-full after:bg-[#163428]'
+                    : 'text-[#65756b] hover:bg-white hover:text-[#14201b]'
                 }`}
-                onClick={() => setActiveView(item.id)}
+                onClick={() => onViewSelect(item.id)}
               >
                 <Icon className="h-4 w-4" />
                 {item.label}
@@ -595,6 +888,86 @@ function Header({ activeView, setActiveView }) {
         </nav>
       </div>
     </header>
+  )
+}
+
+function TournamentHeader({ allMatches, liveMatch, stats, teams }) {
+  const year = formatTournamentYear(allMatches)
+  const currentStage = getCurrentStage(allMatches)
+  const nextMatch = getUpcomingMatches(allMatches)[0]
+  const matchCount = allMatches.length
+
+  return (
+    <section className="border-b border-[#10261d] bg-[#10261d] text-white">
+      <div className="mx-auto grid w-full max-w-7xl min-w-0 gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.55fr)] lg:px-8">
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-lg bg-white/10 text-[#ffdb70] shadow-sm">
+            <Trophy className="h-7 w-7" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-[#cfe7d8]">Deir Hanna World Cup</p>
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold leading-none sm:text-3xl">{year}</h1>
+              <span className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-semibold text-[#cfe7d8]">
+                {currentStage}
+              </span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-[#cfe7d8]">
+              <span>{teams.length} teams</span>
+              <span>{groups.length} groups</span>
+              <span>{matchCount} matches</span>
+              <span>Top 2 advance</span>
+            </div>
+          </div>
+        </div>
+        <div className="grid min-w-0 gap-3">
+          {nextMatch && (
+            <div className="rounded-lg border border-white/10 bg-white/10 px-3 py-3">
+              <p className="text-xs font-semibold uppercase text-[#cfe7d8]">Next match</p>
+              <p className="mt-1 truncate text-sm font-semibold">
+                {formatLongDate(nextMatch.date)} / {nextMatch.time}
+              </p>
+            </div>
+          )}
+          <StatsStrip stats={stats} />
+          {liveMatch && <LiveMatch match={liveMatch} teams={teams} />}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function StatsStrip({ stats }) {
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {stats.map((stat) => (
+        <div key={stat.label} className="rounded-lg bg-white/10 px-2 py-2 text-center">
+          <p className="text-base font-semibold leading-none text-white">{stat.value}</p>
+          <p className="mt-1 truncate text-[11px] font-semibold uppercase text-[#cfe7d8]">
+            {stat.label}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function NotFoundPanel({ onBack }) {
+  return (
+    <section className="rounded-lg border border-[#dce1d7] bg-white p-5 shadow-sm">
+      <h1 className="text-xl font-semibold text-[#14201b]">Page not found</h1>
+      <p className="mt-2 text-sm text-[#65756b]">
+        This tournament page could not be found. It may have been removed or the link may be old.
+      </p>
+      <button
+        type="button"
+        className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-md bg-[#163428] px-4 text-sm font-semibold text-white"
+        onClick={onBack}
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to tournament
+      </button>
+    </section>
   )
 }
 
@@ -646,17 +1019,22 @@ function ErrorBanner({ message, onDismiss }) {
 }
 
 function Overview({
+  allMatches,
   knockoutMatches,
   leaderboards,
   latestResults,
   lineups,
   liveMatch,
+  onMatchSelect,
   onPlayerSelect,
+  onTeamSelect,
+  onTournamentVote,
   onVote,
   playersById,
   standings,
   stats,
   teams,
+  tournamentVotes,
   upcomingMatches,
   votes,
 }) {
@@ -666,6 +1044,7 @@ function Overview({
         latestResults={latestResults}
         lineups={lineups}
         liveMatch={liveMatch}
+        onMatchSelect={onMatchSelect}
         onVote={onVote}
         playersById={playersById}
         standings={standings}
@@ -674,8 +1053,14 @@ function Overview({
         votes={votes}
       />
       <StatsGrid stats={stats} />
+      <TournamentPredictionsPanel
+        leaderboards={leaderboards}
+        onVote={onTournamentVote}
+        teams={teams}
+        tournamentVotes={tournamentVotes}
+      />
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,390px)]">
-        <GroupSnapshot standings={standings} />
+        <GroupSnapshot onTeamSelect={onTeamSelect} standings={standings} />
         <TopContributors
           onPlayerSelect={onPlayerSelect}
           players={leaderboards.contributions.slice(0, 5)}
@@ -684,6 +1069,7 @@ function Overview({
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,390px)]">
         <UpcomingPanel
           matches={upcomingMatches.slice(0, 6)}
+          onMatchSelect={onMatchSelect}
           onVote={onVote}
           teams={teams}
           votes={votes}
@@ -691,6 +1077,7 @@ function Overview({
         <MatchTimeline match={liveMatch} teams={teams} />
       </div>
       <KnockoutPanel matches={knockoutMatches} teams={teams} />
+      <InsightsPanel allMatches={allMatches} leaderboards={leaderboards} teams={teams} />
     </div>
   )
 }
@@ -699,6 +1086,7 @@ function ViewerFocus({
   latestResults,
   lineups,
   liveMatch,
+  onMatchSelect,
   onVote,
   playersById,
   standings,
@@ -721,6 +1109,7 @@ function ViewerFocus({
           {focusMatch ? (
             <FocusMatchCard
               match={focusMatch}
+              onMatchSelect={onMatchSelect}
               onVote={onVote}
               teams={teams}
               votes={votes}
@@ -751,6 +1140,7 @@ function ViewerFocus({
                     expanded
                     match={match}
                     matchOpen={matchOpen}
+                    onMatchSelect={onMatchSelect}
                     onToggleDetails={() =>
                       setOpenResultId((currentId) =>
                         currentId === match.id ? null : match.id,
@@ -780,18 +1170,22 @@ function ViewerFocus({
   )
 }
 
-function FocusMatchCard({ match, onVote, teams, votes }) {
+function FocusMatchCard({ match, onMatchSelect, onVote, teams, votes }) {
   const home = getMatchTeam(match, teams, 'home')
   const away = getMatchTeam(match, teams, 'away')
   const goals = (match.events ?? []).filter((event) => event.type === 'goal').length
 
   return (
     <div className="grid gap-4">
-      <div className="grid gap-3 rounded-lg bg-[#f8faf5] p-4 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
+      <button
+        type="button"
+        className="grid gap-3 rounded-lg bg-[#f8faf5] p-4 text-left transition hover:bg-[#eef3e9] sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center"
+        onClick={() => onMatchSelect?.(match.id)}
+      >
         <TeamBlock team={home} align="right" />
         <ScoreCell match={match} />
         <TeamBlock team={away} />
-      </div>
+      </button>
       <div className="grid gap-3 sm:grid-cols-3">
         <AdminMetric label="Venue" value={match.venue} />
         <AdminMetric label="Status" value={match.status} />
@@ -806,6 +1200,154 @@ function FocusMatchCard({ match, onVote, teams, votes }) {
         />
       )}
     </div>
+  )
+}
+
+function TournamentPredictionsPanel({ leaderboards, onVote, teams, tournamentVotes }) {
+  const topPlayers = leaderboards.contributions.slice(0, 5)
+
+  return (
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <PanelHeader icon={Star} title="Community Predictions" detail="Tournament picks" />
+      <div className="grid gap-4 border-t border-[#e5e9e0] p-4 lg:grid-cols-3">
+        <TournamentVoteCard
+          candidates={teams}
+          getLabel={(team) => team.country}
+          getMeta={(team) => `Group ${team.group}`}
+          getVisual={(team) => <FlagMark team={team} small />}
+          onVote={onVote}
+          title="Tournament winner"
+          tournamentVotes={tournamentVotes}
+          voteType="tournament_winner"
+        />
+        <TournamentVoteCard
+          candidates={leaderboards.goals.slice(0, 5)}
+          getLabel={(player) => player.name}
+          getMeta={(player) => `${player.goals} goals / ${player.team?.country ?? 'Team'}`}
+          getVisual={(player) => <PlayerAvatar player={player} small />}
+          onVote={onVote}
+          title="Top scorer"
+          tournamentVotes={tournamentVotes}
+          voteType="top_scorer"
+        />
+        <TournamentVoteCard
+          candidates={topPlayers}
+          getLabel={(player) => player.name}
+          getMeta={(player) => `${player.contributions} G+A / ${player.team?.country ?? 'Team'}`}
+          getVisual={(player) => <PlayerAvatar player={player} small />}
+          onVote={onVote}
+          title="Best player"
+          tournamentVotes={tournamentVotes}
+          voteType="best_player"
+        />
+      </div>
+    </section>
+  )
+}
+
+function TournamentVoteCard({
+  candidates,
+  getLabel,
+  getMeta,
+  getVisual,
+  onVote,
+  title,
+  tournamentVotes,
+  voteType,
+}) {
+  const bucket = tournamentVotes[voteType] ?? { total: 0, candidates: {}, userChoice: null }
+
+  return (
+    <section className="rounded-lg border border-[#dce1d7] bg-[#fbfdf9] p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-semibold text-[#14201b]">{title}</h3>
+          <p className="text-xs text-[#65756b]">
+            {bucket.total ? `${bucket.total} vote${bucket.total === 1 ? '' : 's'}` : 'No votes yet'}
+          </p>
+        </div>
+        <TrendingVoteBadge bucket={bucket} />
+      </div>
+      <div className="grid gap-2">
+        {candidates.slice(0, 6).map((candidate) => {
+          const vote = getCandidateVoteData(tournamentVotes, voteType, candidate.id)
+
+          return (
+            <button
+              key={`${voteType}-${candidate.id}`}
+              type="button"
+              className={`relative min-h-14 overflow-hidden rounded-md border bg-white px-3 text-left transition ${
+                vote.active
+                  ? 'border-[#17633f] ring-2 ring-[#b8dcc7]'
+                  : 'border-[#dce1d7] hover:border-[#9cb4a5]'
+              }`}
+              onClick={() => onVote?.(voteType, candidate.id)}
+            >
+              <span
+                className="absolute inset-y-0 left-0 bg-[#dff1e6]"
+                style={{ width: `${vote.percent}%` }}
+                aria-hidden="true"
+              />
+              <span className="relative z-10 grid min-w-0 grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-3">
+                {getVisual(candidate)}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-[#14201b]">
+                    {getLabel(candidate)}
+                  </span>
+                  <span className="block truncate text-xs text-[#65756b]">
+                    {getMeta(candidate)}
+                  </span>
+                </span>
+                <span className="text-xs font-semibold text-[#17633f]">
+                  {vote.percent}%
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+function TrendingVoteBadge({ bucket }) {
+  const entries = Object.entries(bucket.candidates ?? {}).sort((a, b) => b[1] - a[1])
+  const top = entries[0]
+
+  return (
+    <span className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-[#65756b]">
+      {top ? `${getVotePercent(top[1], bucket.total)}% top` : 'Open'}
+    </span>
+  )
+}
+
+function InsightsPanel({ allMatches, leaderboards, teams }) {
+  const nextMatch = getUpcomingMatches(allMatches)[0]
+  const scoredMatches = allMatches.filter(isScoredMatch)
+
+  return (
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <PanelHeader icon={BarChart3} title="Tournament Insights" detail="Live context" />
+      <div className="grid gap-3 border-t border-[#e5e9e0] p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <AdminMetric label="Current stage" value={getCurrentStage(allMatches)} />
+        <AdminMetric
+          label="Next kickoff"
+          value={nextMatch ? `${formatDate(nextMatch.date)} / ${nextMatch.time}` : 'No upcoming'}
+        />
+        <AdminMetric label="Completed" value={`${scoredMatches.length}/${allMatches.length}`} />
+        <AdminMetric
+          label="Top scorer"
+          value={leaderboards.goals[0] ? `${leaderboards.goals[0].name} (${leaderboards.goals[0].goals})` : 'None'}
+        />
+        <AdminMetric label="Teams" value={teams.length} />
+        <AdminMetric label="Groups" value={groups.length} />
+        <AdminMetric
+          label="Goals"
+          value={scoredMatches.reduce((total, match) => total + match.homeScore + match.awayScore, 0)}
+        />
+        <AdminMetric label="Format" value="Top 2 qualify" />
+      </div>
+    </section>
   )
 }
 
@@ -831,13 +1373,10 @@ function QualificationRow({ group, rows }) {
   )
 }
 
-function TeamsBoard({ onPlayerSelect, playersByTeam, teams }) {
+function TeamsBoard({ onTeamSelect, playersByTeam, teams }) {
   const [groupFilter, setGroupFilter] = useState('All')
-  const [selectedTeamId, setSelectedTeamId] = useState(null)
-  const [activeTeamTab, setActiveTeamTab] = useState('overview')
   const filters = ['All', ...groups]
   const visibleTeams = teams.filter((team) => groupFilter === 'All' || team.group === groupFilter)
-  const selectedTeam = teams.find((team) => team.id === selectedTeamId)
 
   return (
     <div className="grid min-w-0 gap-4">
@@ -862,22 +1401,11 @@ function TeamsBoard({ onPlayerSelect, playersByTeam, teams }) {
           <TeamCard
             key={team.id}
             players={playersByTeam[team.id] ?? []}
-            onClick={() => {
-              setSelectedTeamId(team.id)
-              setActiveTeamTab('overview')
-            }}
+            onClick={() => onTeamSelect?.(team.id)}
             team={team}
           />
         ))}
       </div>
-      <TeamDetailsModal
-        activeTab={activeTeamTab}
-        onClose={() => setSelectedTeamId(null)}
-        onPlayerSelect={onPlayerSelect}
-        setActiveTab={setActiveTeamTab}
-        players={selectedTeam ? playersByTeam[selectedTeam.id] ?? [] : []}
-        team={selectedTeam}
-      />
     </div>
   )
 }
@@ -886,6 +1414,7 @@ function TeamCard({ onClick, team, players }) {
   return (
     <button
       type="button"
+      aria-label={`Open ${team.country} team page`}
       className="min-w-0 overflow-hidden rounded-lg border border-[#dce1d7] bg-white text-left shadow-sm transition hover:border-[#9cb4a5] hover:shadow-md"
       onClick={onClick}
     >
@@ -924,244 +1453,6 @@ function TeamCardMetric({ label, value }) {
   )
 }
 
-function TeamDetailsModal({
-  activeTab,
-  onClose,
-  onPlayerSelect,
-  players,
-  setActiveTab,
-  team,
-}) {
-  if (!team) {
-    return null
-  }
-
-  const starters = players.slice(0, starterCount)
-  const bench = players.slice(starterCount, maxSquadPlayers)
-  const tabs = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'squad', label: 'Squad' },
-  ]
-
-  return (
-    <ModalShell onClose={onClose} title={team.country}>
-      <div className="flex flex-wrap gap-2 border-b border-[#e5e9e0] px-4 py-3">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`rounded-md border px-3 py-2 text-sm font-medium ${
-              activeTab === tab.id
-                ? 'border-[#163428] bg-[#163428] text-white'
-                : 'border-[#d4dace] bg-white text-[#34433a]'
-            }`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      {activeTab === 'overview' && (
-        <div className="grid gap-4 p-4">
-          <div className="flex items-center gap-3 rounded-lg bg-[#f8faf5] p-4">
-            <FlagMark team={team} />
-            <div>
-              <p className="font-semibold text-[#14201b]">{team.country}</p>
-              <p className="text-sm text-[#65756b]">
-                Group {team.group} / {players.length} of {maxSquadPlayers} players
-              </p>
-            </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <AdminMetric label="Starters" value={starters.length} />
-            <AdminMetric label="Bench" value={bench.length} />
-            <AdminMetric label="Open slots" value={maxSquadPlayers - players.length} />
-          </div>
-        </div>
-      )}
-      {activeTab === 'squad' && (
-        <div className="grid gap-4 p-4">
-          <SquadSection
-            onPlayerSelect={onPlayerSelect}
-            players={starters}
-            title="Starting Seven"
-          />
-          <SquadSection onPlayerSelect={onPlayerSelect} players={bench} title="Bench" />
-        </div>
-      )}
-    </ModalShell>
-  )
-}
-
-function SquadSection({ onPlayerSelect, players, title }) {
-  return (
-    <section>
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase text-[#65756b]">{title}</h3>
-        <span className="text-xs font-semibold text-[#65756b]">{players.length}</span>
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {players.map((player) => (
-          <PlayerCard
-            key={player.id}
-            onClick={() => onPlayerSelect(player.id)}
-            player={player}
-          />
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function PlayerCard({ onClick, player }) {
-  return (
-    <button
-      type="button"
-      className="grid min-h-14 min-w-0 grid-cols-[42px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-[#dce1d7] bg-white px-3 text-left transition hover:border-[#9cb4a5]"
-      onClick={onClick}
-    >
-      <span className="grid h-8 w-8 place-items-center rounded-md bg-[#eef3e9] text-xs font-semibold text-[#34433a]">
-        {player.number}
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold text-[#14201b]">{player.name}</span>
-        <span className="block truncate text-xs text-[#65756b]">
-          {player.goals} G / {player.assists} A
-        </span>
-      </span>
-      <span className="rounded-md bg-[#f8faf5] px-2 py-1 text-xs font-semibold text-[#65756b]">
-        {player.position}
-      </span>
-    </button>
-  )
-}
-
-function PlayerDetailsModal({ allMatches, onClose, player, teams }) {
-  if (!player) {
-    return null
-  }
-
-  const team = teams.find((item) => item.id === player.teamId)
-  const scoringHistory = allMatches
-    .flatMap((match) =>
-      (match.events ?? [])
-        .filter((event) => event.player === player.name || event.assist === player.name)
-        .map((event) => ({
-          ...event,
-          match,
-          contribution: event.player === player.name ? 'Goal' : 'Assist',
-        })),
-    )
-    .sort((a, b) => `${b.match.date} ${b.minute}`.localeCompare(`${a.match.date} ${a.minute}`))
-  const playedMatches = allMatches
-    .filter(
-      (match) =>
-        match.homeTeamId === player.teamId ||
-        match.awayTeamId === player.teamId,
-    )
-    .filter((match) => ['final', 'live'].includes(match.status))
-    .slice(0, 5)
-  const nextGames = getUpcomingMatches(
-    allMatches.filter(
-      (match) =>
-        match.homeTeamId === player.teamId ||
-        match.awayTeamId === player.teamId,
-    ),
-  ).slice(0, 3)
-
-  return (
-    <ModalShell onClose={onClose} title={player.name}>
-      <div className="grid gap-4 p-4">
-        <div className="flex items-center gap-3 rounded-lg bg-[#f8faf5] p-4">
-          {team && <FlagMark team={team} />}
-          <div className="min-w-0">
-            <p className="truncate font-semibold text-[#14201b]">{player.name}</p>
-            <p className="truncate text-sm text-[#65756b]">
-              {team?.country} / #{player.number} / {player.position}
-            </p>
-          </div>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <AdminMetric label="Goals" value={player.goals} />
-          <AdminMetric label="Assists" value={player.assists} />
-          <AdminMetric label="G + A" value={player.goals + player.assists} />
-        </div>
-        <ModalSection title="History">
-          {scoringHistory.length ? (
-            scoringHistory.map((event) => (
-              <EventDetailRow key={`${event.match.id}-${event.minute}-${event.contribution}`} event={event} teams={teams} />
-            ))
-          ) : (
-            <EmptyState text="No goals or assists recorded yet." />
-          )}
-        </ModalSection>
-        <ModalSection title="Recent Matches">
-          {playedMatches.length ? (
-            playedMatches.map((match) => <CompactMatchDetail key={match.id} match={match} teams={teams} />)
-          ) : (
-            <EmptyState text="No match history yet." />
-          )}
-        </ModalSection>
-        <ModalSection title="Next Games">
-          {nextGames.length ? (
-            nextGames.map((match) => <CompactMatchDetail key={match.id} match={match} teams={teams} />)
-          ) : (
-            <EmptyState text="No upcoming games scheduled." />
-          )}
-        </ModalSection>
-      </div>
-    </ModalShell>
-  )
-}
-
-function ModalShell({ children, onClose, title }) {
-  useEffect(() => {
-    function handleKeyDown(event) {
-      if (event.key === 'Escape') {
-        onClose()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
-
-  return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-[#14201b]/55 px-4 py-6"
-      onClick={onClose}
-    >
-      <section
-        className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex min-h-14 items-center justify-between gap-4 border-b border-[#e5e9e0] px-4">
-          <h2 className="truncate text-base font-semibold text-[#14201b]">{title}</h2>
-          <button
-            type="button"
-            className="grid h-9 w-9 place-items-center rounded-md border border-[#d4dace] bg-white text-[#34433a]"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="max-h-[calc(90vh-56px)] overflow-y-auto">{children}</div>
-      </section>
-    </div>
-  )
-}
-
-function ModalSection({ children, title }) {
-  return (
-    <section>
-      <h3 className="mb-3 text-sm font-semibold uppercase text-[#65756b]">{title}</h3>
-      <div className="grid gap-2">{children}</div>
-    </section>
-  )
-}
-
 function EmptyState({ text }) {
   return (
     <div className="rounded-lg border border-dashed border-[#cbd5c6] bg-[#fbfdf9] p-4 text-sm text-[#65756b]">
@@ -1191,19 +1482,6 @@ function EventDetailRow({ event, teams }) {
         </p>
       </div>
       {team && <FlagMark team={team} small />}
-    </div>
-  )
-}
-
-function CompactMatchDetail({ match, teams }) {
-  const home = getMatchTeam(match, teams, 'home')
-  const away = getMatchTeam(match, teams, 'away')
-
-  return (
-    <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-lg bg-[#f8faf5] px-3 sm:gap-3">
-      <TeamMini team={home} align="right" />
-      <ScoreCell match={match} />
-      <TeamMini team={away} />
     </div>
   )
 }
@@ -1263,9 +1541,11 @@ function LiveMatch({ match, teams }) {
         <TeamBlock team={home} align="right" />
         <div className="min-w-24 rounded-lg bg-[#14201b] px-4 py-3 text-center text-white">
           <p className="text-3xl font-semibold leading-none">
-            {match.homeScore}-{match.awayScore}
+            {isScoredMatch(match) ? `${match.homeScore}-${match.awayScore}` : match.time}
           </p>
-          <p className="mt-1 text-xs text-[#cfe7d8]">Now</p>
+          <p className="mt-1 text-xs text-[#cfe7d8]">
+            {match.status === 'live' ? 'Now' : match.status === 'scheduled' ? 'Kickoff' : 'Final'}
+          </p>
         </div>
         <TeamBlock team={away} />
       </div>
@@ -1326,7 +1606,7 @@ function StatusPill({ status }) {
   )
 }
 
-function GroupSnapshot({ standings }) {
+function GroupSnapshot({ onTeamSelect, standings }) {
   return (
     <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
       <PanelHeader icon={Table2} title="Group Tables" detail="Top two advance" />
@@ -1339,7 +1619,11 @@ function GroupSnapshot({ standings }) {
             </div>
             <div className="grid gap-2">
               {standings[group].map((row) => (
-                <CompactStandingRow key={row.team.id} row={row} />
+                <CompactStandingRow
+                  key={row.team.id}
+                  onTeamSelect={onTeamSelect}
+                  row={row}
+                />
               ))}
             </div>
           </div>
@@ -1349,9 +1633,13 @@ function GroupSnapshot({ standings }) {
   )
 }
 
-function CompactStandingRow({ row }) {
+function CompactStandingRow({ onTeamSelect, row }) {
   return (
-    <div className="grid min-h-12 grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2 rounded-md bg-[#f8faf5] px-3 sm:gap-3">
+    <button
+      type="button"
+      className="grid min-h-12 grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2 rounded-md bg-[#f8faf5] px-3 text-left transition hover:bg-[#eef3e9] sm:gap-3"
+      onClick={() => onTeamSelect?.(row.team.id)}
+    >
       <span
         className={`grid h-7 w-7 place-items-center rounded-md text-xs font-semibold ${
           row.qualified ? 'bg-[#dff1e6] text-[#17633f]' : 'bg-[#ecefe8] text-[#65756b]'
@@ -1367,7 +1655,7 @@ function CompactStandingRow({ row }) {
         {row.played} / {row.goalDifference > 0 ? '+' : ''}
         {row.goalDifference} / {row.points}
       </span>
-    </div>
+    </button>
   )
 }
 
@@ -1397,7 +1685,7 @@ function TopContributors({ onPlayerSelect, players }) {
   )
 }
 
-function UpcomingPanel({ matches, onVote, teams, votes }) {
+function UpcomingPanel({ matches, onMatchSelect, onVote, teams, votes }) {
   return (
     <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
       <PanelHeader icon={CalendarDays} title="Upcoming Matches" detail="Schedule" />
@@ -1407,6 +1695,7 @@ function UpcomingPanel({ matches, onVote, teams, votes }) {
             <MatchRow
               key={match.id}
               match={match}
+              onMatchSelect={onMatchSelect}
               onVote={onVote}
               teams={teams}
               votes={votes}
@@ -1452,120 +1741,217 @@ function MatchTimeline({ match, teams }) {
   )
 }
 
-function MatchesBoard({ lineups, matches, onVote, playersById, teams, votes }) {
-  const [filter, setFilter] = useState('All')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [openMatchId, setOpenMatchId] = useState(
-    matches.find((match) => lineups[match.id])?.id ?? null,
-  )
-  const filters = ['All', 'Group', 'Knockout', 'Live']
-  const normalizedSearchTerm = searchTerm.trim().toLowerCase()
-  const visibleMatches = matches.filter((match) => {
-    const home = getMatchTeam(match, teams, 'home')
-    const away = getMatchTeam(match, teams, 'away')
-    const text = [
-      home.country,
-      home.code,
-      away.country,
-      away.code,
-      match.stage,
-      match.group,
-      match.venue,
-      match.status,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase()
-    const matchesSearch = !normalizedSearchTerm || text.includes(normalizedSearchTerm)
+function MatchesBoard({ matches, onMatchSelect, onVote, teams, votes }) {
+  const [mode, setMode] = useState('date')
+  const [selectedGroup, setSelectedGroup] = useState('A')
+  const [selectedRound, setSelectedRound] = useState('group-1')
+  const [selectedTeamId, setSelectedTeamId] = useState(teams[0]?.id ?? '')
+  const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0]
+  const sortedMatches = useMemo(() => [...matches].sort(compareMatchDate), [matches])
 
-    if (!matchesSearch) return false
-    if (filter === 'All') return true
-    if (filter === 'Knockout') return match.stage !== 'Group'
-    if (filter === 'Live') return match.status === 'live'
-    return match.stage === filter
-  })
+  const sections = useMemo(() => {
+    if (mode === 'group') {
+      return groupMatches(
+        sortedMatches.filter((match) => match.stage === 'Group' && match.group === selectedGroup),
+        getMatchRoundLabel,
+      )
+    }
+
+    if (mode === 'round') {
+      return groupMatches(
+        sortedMatches.filter((match) => matchBelongsToRound(match, selectedRound)),
+        () => getRoundOptionLabel(selectedRound),
+      )
+    }
+
+    if (mode === 'team' && selectedTeam) {
+      return groupMatches(
+        sortedMatches.filter(
+          (match) =>
+            match.homeTeamId === selectedTeam.id || match.awayTeamId === selectedTeam.id,
+        ),
+        getMatchRoundLabel,
+      )
+    }
+
+    return groupMatches(sortedMatches, (match) => formatLongDate(match.date))
+  }, [mode, selectedGroup, selectedRound, selectedTeam, sortedMatches])
 
   return (
     <div className="grid min-w-0 gap-4">
       <Toolbar title="Matches" icon={CalendarDays}>
-        {filters.map((item) => (
-          <button
-            key={item}
-            type="button"
-            className={`rounded-md border px-3 py-2 text-sm font-medium ${
-              filter === item
-                ? 'border-[#163428] bg-[#163428] text-white'
-                : 'border-[#d4dace] bg-white text-[#34433a]'
-            }`}
-            onClick={() => setFilter(item)}
-          >
-            {item}
-          </button>
-        ))}
-      </Toolbar>
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#65756b]" />
-        <input
-          className="min-h-11 w-full rounded-lg border border-[#d4dace] bg-white pl-10 pr-3 text-sm outline-none transition focus:border-[#1f6d4d] focus:ring-2 focus:ring-[#b8dcc7]"
-          onChange={(event) => setSearchTerm(event.target.value)}
-          placeholder="Search matches by team, stage, venue, or status"
-          value={searchTerm}
-        />
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-[#65756b]">
-        <span>
-          Showing {visibleMatches.length} of {matches.length} matches
+        <span className="rounded-md bg-white px-3 py-2 text-xs font-semibold text-[#65756b]">
+          {matches.length} fixtures
         </span>
-        {normalizedSearchTerm && (
-          <button
-            type="button"
-            className="rounded-md border border-[#d4dace] bg-white px-3 py-1.5 text-xs font-semibold text-[#34433a]"
-            onClick={() => setSearchTerm('')}
-          >
-            Clear search
-          </button>
-        )}
-      </div>
-      <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
-        <div className="divide-y divide-[#e5e9e0]">
-          {visibleMatches.length ? (
-            visibleMatches.map((match) => {
-              const matchOpen = openMatchId === match.id
-
-              return (
-                <div key={match.id}>
-                  <MatchRow
-                    match={match}
-                    expanded
-                    matchOpen={matchOpen}
-                    onVote={onVote}
-                    onToggleDetails={() =>
-                      setOpenMatchId((currentId) =>
-                        currentId === match.id ? null : match.id,
-                      )
-                    }
-                    teams={teams}
-                  />
-                  {matchOpen && (
-                    <MatchDetailsPanel
-                      lineups={lineups}
-                      match={match}
-                      onVote={onVote}
-                      playersById={playersById}
-                      teams={teams}
-                      votes={votes}
-                    />
-                  )}
-                </div>
-              )
-            })
-          ) : (
-            <div className="p-4">
-              <EmptyState text="No matches match the current search." />
-            </div>
+      </Toolbar>
+      <section className="overflow-hidden rounded-lg border border-[#dce1d7] bg-[#10261d] shadow-sm">
+        <div className="scrollbar-none flex gap-2 overflow-x-auto border-b border-white/10 px-3 py-3">
+          {matchFilterModes.map((item) => (
+            <FilterChip
+              active={mode === item.id}
+              key={item.id}
+              label={item.label}
+              onClick={() => setMode(item.id)}
+            />
+          ))}
+        </div>
+        <div className="grid gap-3 border-b border-white/10 px-3 py-3">
+          {mode === 'group' && (
+            <FilterSelect
+              label="Select group"
+              onChange={setSelectedGroup}
+              options={groups.map((group) => ({ label: `Group ${group}`, value: group }))}
+              value={selectedGroup}
+            />
+          )}
+          {mode === 'round' && (
+            <FilterSelect
+              label="Select round"
+              onChange={setSelectedRound}
+              options={roundFilterOptions.map((round) => ({
+                label: round.label,
+                value: round.id,
+              }))}
+              value={selectedRound}
+            />
+          )}
+          {mode === 'team' && (
+            <TeamSearchSelector
+              onChange={setSelectedTeamId}
+              selectedTeamId={selectedTeam?.id}
+              teams={teams}
+            />
           )}
         </div>
+        <MatchSectionList
+          onMatchSelect={onMatchSelect}
+          onVote={onVote}
+          sections={sections}
+          teams={teams}
+          votes={votes}
+        />
       </section>
+    </div>
+  )
+}
+
+function FilterChip({ active, label, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`min-h-11 shrink-0 rounded-full px-4 text-sm font-semibold transition ${
+        active ? 'bg-white text-[#14201b]' : 'bg-black/25 text-white hover:bg-white/15'
+      }`}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  )
+}
+
+function FilterSelect({ label, onChange, options, value }) {
+  return (
+    <label className="relative grid max-w-xs gap-1 text-xs font-semibold uppercase text-[#9fb5aa]">
+      {label}
+      <select
+        className="min-h-12 w-full appearance-none rounded-lg border border-white/15 bg-black/20 px-3 pr-10 text-sm font-semibold normal-case text-white outline-none focus:border-white/40"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute bottom-3 right-3 h-5 w-5 text-white" />
+    </label>
+  )
+}
+
+function TeamSearchSelector({ onChange, selectedTeamId, teams }) {
+  const [query, setQuery] = useState('')
+  const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0]
+  const normalizedQuery = query.trim().toLowerCase()
+  const visibleTeams = teams.filter((team) =>
+    [team.country, team.code].join(' ').toLowerCase().includes(normalizedQuery),
+  )
+
+  return (
+    <div className="grid gap-2 rounded-lg bg-black/20 p-3">
+      <label className="relative grid gap-1 text-xs font-semibold uppercase text-[#9fb5aa]">
+        Select team
+        <Search className="pointer-events-none absolute bottom-3 left-3 h-4 w-4 text-[#9fb5aa]" />
+        <input
+          className="min-h-12 w-full rounded-lg border border-white/15 bg-[#0b1813] pl-10 pr-3 text-sm font-semibold normal-case text-white outline-none focus:border-white/40"
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={selectedTeam ? selectedTeam.country : 'Search teams'}
+          value={query}
+        />
+      </label>
+      {selectedTeam && !query && (
+        <div className="flex min-w-0 items-center gap-3 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-white">
+          <FlagMark team={selectedTeam} small />
+          <span className="truncate text-sm font-semibold">{selectedTeam.country}</span>
+        </div>
+      )}
+      <div className="grid max-h-56 gap-1 overflow-y-auto">
+        {(query ? visibleTeams : teams).map((team) => (
+          <button
+            key={team.id}
+            type="button"
+            className={`grid min-h-11 grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-3 text-left text-sm font-semibold ${
+              selectedTeamId === team.id ? 'bg-white text-[#14201b]' : 'bg-white/10 text-white'
+            }`}
+            onClick={() => {
+              onChange(team.id)
+              setQuery('')
+            }}
+          >
+            <FlagMark team={team} small />
+            <span className="truncate">{team.country}</span>
+            <span className="text-xs opacity-70">{team.code}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function MatchSectionList({ onMatchSelect, onVote, sections, teams, votes }) {
+  if (!sections.length) {
+    return (
+      <div className="p-4">
+        <EmptyState text="No matches found for this filter." />
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid gap-3 bg-[#07100d] p-3">
+      {sections.map((section) => (
+        <section
+          key={section.title}
+          className="overflow-hidden rounded-xl border border-white/10 bg-[#111f19]"
+        >
+          <div className="border-b border-white/10 px-4 py-3">
+            <h3 className="text-sm font-semibold text-white">{section.title}</h3>
+          </div>
+          <div className="divide-y divide-white/10">
+            {section.matches.map((match) => (
+              <div key={match.id} className="bg-white">
+                <MatchRow
+                  match={match}
+                  onMatchSelect={onMatchSelect}
+                  onVote={onVote}
+                  teams={teams}
+                  votes={votes}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   )
 }
@@ -1574,6 +1960,7 @@ function MatchRow({
   match,
   expanded = false,
   matchOpen = false,
+  onMatchSelect,
   onVote,
   onToggleDetails,
   teams,
@@ -1582,15 +1969,27 @@ function MatchRow({
   const home = getMatchTeam(match, teams, 'home')
   const away = getMatchTeam(match, teams, 'away')
   const goalCount = (match.events ?? []).filter((event) => event.type === 'goal').length
-  const clickableProps = expanded
+  const matchLabel = `Open match ${home.country} vs ${away.country}, ${getMatchRoundLabel(match)}`
+  const clickableProps = expanded || onMatchSelect
     ? {
+        'aria-label': matchLabel,
         role: 'button',
         tabIndex: 0,
-        onClick: onToggleDetails,
+        onClick: () => {
+          if (onMatchSelect) {
+            onMatchSelect(match.id)
+          } else {
+            onToggleDetails?.()
+          }
+        },
         onKeyDown: (event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
-            onToggleDetails?.()
+            if (onMatchSelect) {
+              onMatchSelect(match.id)
+            } else {
+              onToggleDetails?.()
+            }
           }
         },
       }
@@ -1598,39 +1997,43 @@ function MatchRow({
 
   return (
     <article
-      className={`min-w-0 ${expanded ? 'cursor-pointer transition hover:bg-[#fbfdf9]' : ''}`}
+      className={`min-w-0 ${expanded || onMatchSelect ? 'cursor-pointer transition hover:bg-[#fbfdf9]' : ''}`}
       {...clickableProps}
     >
-      <div className="grid min-w-0 gap-3 px-3 py-4 sm:grid-cols-[180px_minmax(0,1fr)_auto] sm:items-center sm:px-4">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-[#14201b]">
-            {match.stage}
-            {match.group ? ` ${match.group}` : ''}
+      <div className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-4 sm:grid-cols-[112px_minmax(0,1fr)_auto] sm:px-4">
+        <div className="min-w-0 text-center sm:text-left">
+          <p className="truncate text-xs font-semibold text-[#65756b]">
+            {formatDate(match.date)}
           </p>
-          <p className="mt-1 text-xs text-[#65756b]">
-            {formatDate(match.date)} / {match.time}
+          <p className="mt-1 text-sm font-semibold text-[#14201b]">{match.time}</p>
+          <p className="mt-1 truncate text-[11px] font-semibold uppercase text-[#65756b]">
+            {getMatchRoundLabel(match)}
           </p>
-          {expanded && <p className="mt-1 truncate text-xs text-[#65756b]">{match.venue}</p>}
         </div>
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3">
-          <TeamMini team={home} align="right" />
+        <div className="grid min-w-0 gap-1 border-l border-[#dce1d7] pl-3">
+          <p className="mb-1 truncate text-xs font-semibold text-[#65756b]">
+            {getMatchCompetitionLabel(match)}
+          </p>
+          <MatchTeamLine team={home} />
+          <MatchTeamLine team={away} />
+        </div>
+        <div className="flex min-w-0 flex-col items-end gap-2">
           <ScoreCell match={match} />
-          <TeamMini team={away} />
-        </div>
-        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
           <StatusPill status={match.status} />
           {goalCount > 0 && (
-            <span className="inline-flex min-h-7 items-center rounded-md bg-[#eef3e9] px-2.5 text-xs font-semibold text-[#34433a]">
+            <span className="hidden min-h-7 items-center rounded-md bg-[#eef3e9] px-2.5 text-xs font-semibold text-[#34433a] sm:inline-flex">
               {goalCount} goals
             </span>
           )}
           {match.status === 'scheduled' && match.homeTeamId && match.awayTeamId && (
-            <VoteSummaryPill match={match} votes={votes} />
+            <div className="hidden sm:block">
+              <VoteSummaryPill match={match} votes={votes} />
+            </div>
           )}
           {expanded && (
             <button
               type="button"
-              className={`inline-flex min-h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold ${
+              className={`hidden min-h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold sm:inline-flex ${
                 matchOpen
                   ? 'border-[#163428] bg-[#163428] text-white'
                   : 'border-[#d4dace] bg-[#fbfdf9] text-[#34433a]'
@@ -1644,6 +2047,9 @@ function MatchRow({
               <ClipboardList className="h-3.5 w-3.5" />
               Details
             </button>
+          )}
+          {match.status === 'scheduled' && (
+            <Bell className="h-4 w-4 text-[#7b61ff]" aria-label="Reminder" />
           )}
         </div>
       </div>
@@ -1981,20 +2387,13 @@ function LineupPlayerRow({ player }) {
   )
 }
 
-function TeamMini({ team, align = 'left' }) {
+function MatchTeamLine({ team }) {
   return (
-    <div
-      className={`flex min-w-0 items-center gap-2 ${
-        align === 'right' ? 'justify-end text-right' : ''
-      }`}
-    >
-      {align === 'right' && (
-        <span className="min-w-0 truncate text-sm font-medium">{team.country}</span>
-      )}
+    <div className="flex min-w-0 items-center gap-2">
       <FlagMark team={team} small />
-      {align !== 'right' && (
-        <span className="min-w-0 truncate text-sm font-medium">{team.country}</span>
-      )}
+      <span className="min-w-0 truncate text-sm font-semibold text-[#14201b]">
+        {team.country}
+      </span>
     </div>
   )
 }
@@ -2037,10 +2436,14 @@ function TablesBoard({ selectedGroup, setSelectedGroup, standings }) {
           </button>
         ))}
       </Toolbar>
-      <section className="grid gap-3 md:hidden">
-        {selectedRows.map((row) => (
-          <MobileStandingCard key={row.team.id} row={row} />
-        ))}
+      <QualificationRules />
+      <section className="overflow-hidden rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+        <PanelHeader icon={Table2} title={`Group ${selectedGroup}`} detail="Top two advance" />
+        <div className="grid gap-3 border-t border-[#e5e9e0] p-3 md:hidden">
+          {selectedRows.map((row) => (
+            <MobileStandingCard key={row.team.id} row={row} />
+          ))}
+        </div>
       </section>
       <section className="hidden overflow-hidden rounded-lg border border-[#dce1d7] bg-white shadow-sm md:block">
         <div className="overflow-x-auto">
@@ -2101,6 +2504,33 @@ function TablesBoard({ selectedGroup, setSelectedGroup, standings }) {
         </div>
       </section>
     </div>
+  )
+}
+
+function QualificationRules() {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <button
+        type="button"
+        className="flex min-h-14 w-full items-center justify-between gap-3 px-4 text-left"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span>
+          <span className="block text-sm font-semibold text-[#14201b]">Qualification Rules</span>
+          <span className="block text-xs text-[#65756b]">Top 2 advance from each group</span>
+        </span>
+        <ChevronDown className={`h-5 w-5 text-[#65756b] transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="grid gap-2 border-t border-[#e5e9e0] px-4 py-3 text-sm text-[#34433a]">
+          <p>1. Top 2 teams from each group qualify for the knockout stage.</p>
+          <p>2. Tiebreakers: points, goal difference, goals scored, then head-to-head if available.</p>
+          <p>3. If teams are still tied, fair play ranking and organizer decision can be used.</p>
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -2487,6 +2917,635 @@ function PlaceholderTeam({ label }) {
     <div className="bracket-team-slot flex min-h-10 items-center gap-3 rounded-md bg-[#f8faf5] px-3">
       <ShieldCheck className="h-4 w-4 text-[#65756b]" />
       <span className="truncate text-sm font-medium text-[#34433a]">{label}</span>
+    </div>
+  )
+}
+
+function MatchCenterPage({
+  allMatches,
+  lineups,
+  match,
+  onBack,
+  onTeamSelect,
+  onVote,
+  playersById,
+  standings,
+  teams,
+  votes,
+}) {
+  const [activeTab, setActiveTab] = useState('Details')
+  const home = getMatchTeam(match, teams, 'home')
+  const away = getMatchTeam(match, teams, 'away')
+  const relatedMatches = allMatches
+    .filter(
+      (item) =>
+        item.id !== match.id &&
+        [item.homeTeamId, item.awayTeamId].some((teamId) =>
+          [match.homeTeamId, match.awayTeamId].includes(teamId),
+        ),
+    )
+    .slice(0, 5)
+
+  return (
+    <div className="grid min-w-0 gap-4">
+      <DetailTopBar onBack={onBack} title="Match Center" />
+      <section className="overflow-hidden rounded-xl border border-[#dce1d7] bg-[#10261d] text-white shadow-sm">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <span className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-semibold">
+            {getMatchCompetitionLabel(match)}
+          </span>
+          <div className="flex gap-2">
+            <IconButton icon={Share2} label="Share match" />
+            <IconButton icon={Bell} label="Set reminder" />
+            <IconButton icon={Star} label="Favorite match" />
+          </div>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4 pb-5 pt-2">
+          <MatchHeroTeam align="right" onTeamSelect={onTeamSelect} team={home} />
+          <div className="rounded-xl bg-white px-4 py-3 text-center text-[#14201b] shadow-sm">
+            <p className="text-2xl font-semibold leading-none">
+              {isScoredMatch(match) ? `${match.homeScore}-${match.awayScore}` : match.time}
+            </p>
+            <p className="mt-1 text-xs font-semibold uppercase text-[#65756b]">{match.status}</p>
+          </div>
+          <MatchHeroTeam onTeamSelect={onTeamSelect} team={away} />
+        </div>
+        <div className="border-t border-white/10 px-4 py-3 text-center text-xs font-semibold text-[#cfe7d8]">
+          {formatLongDate(match.date)} / {match.venue}
+        </div>
+      </section>
+      <TabStrip activeTab={activeTab} onChange={setActiveTab} tabs={detailTabs} />
+      {activeTab === 'Details' && (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="grid gap-4">
+            <MatchCompetitionCard match={match} />
+            {match.status === 'scheduled' && match.homeTeamId && match.awayTeamId && (
+              <PredictionVote match={match} onVote={onVote} teams={teams} votes={votes} />
+            )}
+            <TeamComparisonCard allMatches={allMatches} away={away} home={home} standings={standings} />
+            <ScoringSummary match={match} teams={teams} />
+          </div>
+          <div className="grid content-start gap-4">
+            <StandingsPreview match={match} onTeamSelect={onTeamSelect} standings={standings} />
+            <RecentFormCard allMatches={allMatches} away={away} home={home} />
+          </div>
+        </div>
+      )}
+      {activeTab === 'Lineups' && (
+        <LineupsPanel lineups={lineups} match={match} playersById={playersById} teams={teams} />
+      )}
+      {activeTab === 'Standings' && (
+        <StandingsPreview large match={match} onTeamSelect={onTeamSelect} standings={standings} />
+      )}
+      {activeTab === 'Matches' && (
+        <section className="overflow-hidden rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+          <PanelHeader icon={CalendarDays} title="Related Matches" detail="Both teams" />
+          <div className="divide-y divide-[#e5e9e0] border-t border-[#e5e9e0]">
+            {relatedMatches.length ? (
+              relatedMatches.map((item) => (
+                <MatchRow
+                  key={item.id}
+                  match={item}
+                  onMatchSelect={(matchId) => setHashRoute('match', matchId)}
+                  teams={teams}
+                  votes={votes}
+                />
+              ))
+            ) : (
+              <div className="p-4">
+                <EmptyState text="No related matches yet." />
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
+
+function DetailTopBar({ onBack, title }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <button
+        type="button"
+        className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[#d4dace] bg-white px-3 text-sm font-semibold text-[#34433a]"
+        onClick={onBack}
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back
+      </button>
+      <h1 className="truncate text-lg font-semibold text-[#14201b]">{title}</h1>
+    </div>
+  )
+}
+
+function IconButton({ icon: Icon, label }) {
+  return (
+    <button
+      type="button"
+      className="grid h-10 w-10 place-items-center rounded-md bg-white/10 text-white transition hover:bg-white/20"
+      aria-label={label}
+    >
+      <Icon className="h-4 w-4" />
+    </button>
+  )
+}
+
+function MatchHeroTeam({ align = 'left', onTeamSelect, team }) {
+  return (
+    <button
+      type="button"
+      className={`grid min-w-0 justify-items-center gap-2 text-center ${
+        align === 'right' ? 'sm:justify-items-end sm:text-right' : 'sm:justify-items-start sm:text-left'
+      }`}
+      onClick={() => team?.id && onTeamSelect?.(team.id)}
+    >
+      <FlagMark team={team} />
+      <span className="max-w-full truncate text-sm font-semibold sm:text-base">{team.country}</span>
+    </button>
+  )
+}
+
+function TabStrip({ activeTab, onChange, tabs }) {
+  return (
+    <div className="scrollbar-none flex gap-2 overflow-x-auto border-b border-[#dce1d7]">
+      {tabs.map((tab) => (
+        <button
+          key={tab}
+          type="button"
+          className={`relative min-h-11 shrink-0 px-3 text-sm font-semibold ${
+            activeTab === tab
+              ? 'text-[#14201b] after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-[#163428]'
+              : 'text-[#65756b]'
+          }`}
+          onClick={() => onChange(tab)}
+        >
+          {tab}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function MatchCompetitionCard({ match }) {
+  return (
+    <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <PanelHeader icon={Trophy} title="Competition" detail={getMatchRoundLabel(match)} />
+      <div className="grid gap-3 border-t border-[#e5e9e0] p-4 sm:grid-cols-2">
+        <AdminMetric label="Tournament" value="Deir Hanna World Cup" />
+        <AdminMetric label="Round" value={getMatchRoundLabel(match)} />
+        <AdminMetric label="Date" value={formatLongDate(match.date)} />
+        <AdminMetric label="Time" value={match.time} />
+        <AdminMetric label="Venue" value={match.venue} />
+        <AdminMetric label="Status" value={match.status} />
+      </div>
+    </section>
+  )
+}
+
+function StandingsPreview({ large = false, match, onTeamSelect, standings }) {
+  const rows = match.group ? standings[match.group] ?? [] : []
+
+  return (
+    <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <PanelHeader
+        icon={Table2}
+        title={large ? 'Group Standings' : 'Standings Preview'}
+        detail={match.group ? `Group ${match.group}` : 'Knockout match'}
+      />
+      <div className="border-t border-[#e5e9e0] p-3">
+        {rows.length ? (
+          <div className="grid gap-2">
+            {rows.map((row) => (
+              <CompactStandingRow
+                key={row.team.id}
+                onTeamSelect={onTeamSelect}
+                row={row}
+              />
+            ))}
+          </div>
+        ) : (
+          <EmptyState text="Standings are available for group matches." />
+        )}
+      </div>
+    </section>
+  )
+}
+
+function TeamComparisonCard({ allMatches, away, home, standings }) {
+  const homeRecord = getTeamRecord(allMatches, home.id)
+  const awayRecord = getTeamRecord(allMatches, away.id)
+  const homeStanding = getTeamStandingRow(standings, home.id)
+  const awayStanding = getTeamStandingRow(standings, away.id)
+
+  return (
+    <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <PanelHeader icon={BarChart3} title="Compare Teams" detail="Tournament form" />
+      <div className="grid gap-3 border-t border-[#e5e9e0] p-4">
+        <ComparisonRow away={awayStanding?.rank ?? '-'} home={homeStanding?.rank ?? '-'} label="Ranking" />
+        <ComparisonRow away={awayRecord.goalsFor} home={homeRecord.goalsFor} label="Goals scored" />
+        <ComparisonRow away={awayRecord.goalsAgainst} home={homeRecord.goalsAgainst} label="Goals conceded" />
+        <ComparisonRow away={awayRecord.wins} home={homeRecord.wins} label="Wins" />
+        <ComparisonRow away={awayRecord.draws} home={homeRecord.draws} label="Draws" />
+        <ComparisonRow away={awayRecord.losses} home={homeRecord.losses} label="Losses" />
+      </div>
+    </section>
+  )
+}
+
+function ComparisonRow({ away, home, label }) {
+  return (
+    <div className="grid grid-cols-[52px_minmax(0,1fr)_52px] items-center gap-3 text-sm">
+      <span className="text-center font-semibold text-[#14201b]">{home}</span>
+      <span className="truncate text-center text-xs font-semibold uppercase text-[#65756b]">{label}</span>
+      <span className="text-center font-semibold text-[#14201b]">{away}</span>
+    </div>
+  )
+}
+
+function RecentFormCard({ allMatches, away, home }) {
+  return (
+    <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <PanelHeader icon={Activity} title="Recent Form" detail="Last matches" />
+      <div className="grid gap-3 border-t border-[#e5e9e0] p-4">
+        <FormLine form={getTeamForm(allMatches, home.id)} team={home} />
+        <FormLine form={getTeamForm(allMatches, away.id)} team={away} />
+      </div>
+    </section>
+  )
+}
+
+function FormLine({ form, team }) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 rounded-md bg-[#f8faf5] px-3 py-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <FlagMark team={team} small />
+        <span className="truncate text-sm font-semibold">{team.country}</span>
+      </div>
+      <div className="flex gap-1">
+        {(form.length ? form : ['-', '-', '-']).map((item, index) => (
+          <span
+            key={`${team.id}-form-${index}`}
+            className={`grid h-7 w-7 place-items-center rounded-md text-xs font-semibold ${
+              item === 'W'
+                ? 'bg-[#dff1e6] text-[#17633f]'
+                : item === 'L'
+                  ? 'bg-[#ffe4e4] text-[#9b2f2f]'
+                  : 'bg-[#ecefe8] text-[#65756b]'
+            }`}
+          >
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function TeamPage({ allMatches, onBack, onMatchSelect, onPlayerSelect, players, standings, team, teams }) {
+  const [activeTab, setActiveTab] = useState('Matches')
+  const [playerQuery, setPlayerQuery] = useState('')
+  const teamMatches = getTeamMatches(allMatches, team.id)
+  const standing = getTeamStandingRow(standings, team.id)
+  const filteredPlayers = players.filter((player) =>
+    [player.name, player.number].join(' ').toLowerCase().includes(playerQuery.trim().toLowerCase()),
+  )
+
+  return (
+    <div className="grid min-w-0 gap-4">
+      <DetailTopBar onBack={onBack} title="Team Page" />
+      <section className="overflow-hidden rounded-xl border border-[#dce1d7] bg-[#10261d] text-white shadow-sm">
+        <div className="flex min-w-0 items-center justify-between gap-3 px-4 py-5">
+          <div className="flex min-w-0 items-center gap-4">
+            <FlagMark team={team} />
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-semibold">{team.country}</h1>
+              <p className="mt-1 text-sm text-[#cfe7d8]">Group {team.group} / {players.length} players</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <IconButton icon={Share2} label="Share team" />
+            <IconButton icon={Star} label="Favorite team" />
+          </div>
+        </div>
+      </section>
+      <TabStrip activeTab={activeTab} onChange={setActiveTab} tabs={teamPageTabs} />
+      {activeTab === 'Matches' && (
+        <section className="overflow-hidden rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+          <PanelHeader icon={CalendarDays} title="Matches" detail={`${teamMatches.length} fixtures`} />
+          <div className="divide-y divide-[#e5e9e0] border-t border-[#e5e9e0]">
+            {teamMatches.map((match) => (
+              <MatchRow
+                key={match.id}
+                match={match}
+                onMatchSelect={onMatchSelect}
+                teams={teams}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+      {activeTab === 'Standings' && (
+        <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+          <PanelHeader icon={Table2} title="Standings" detail={`Group ${team.group}`} />
+          <div className="grid gap-2 border-t border-[#e5e9e0] p-3">
+            {(standings[team.group] ?? []).map((row) => (
+              <CompactStandingRow key={row.team.id} row={row} />
+            ))}
+          </div>
+        </section>
+      )}
+      {activeTab === 'Players' && (
+        <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+          <PanelHeader icon={Users} title="Players" detail="Search players" />
+          <div className="grid gap-3 border-t border-[#e5e9e0] p-4">
+            <SearchInput
+              onChange={setPlayerQuery}
+              placeholder="Search players"
+              value={playerQuery}
+            />
+            <div className="grid gap-2">
+              {filteredPlayers.map((player) => (
+                <CleanPlayerCard
+                  key={player.id}
+                  onClick={() => onPlayerSelect(player.id)}
+                  player={player}
+                  team={team}
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+      {activeTab === 'Statistics' && (
+        <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+          <PanelHeader icon={BarChart3} title="Statistics" detail="Tournament totals" />
+          <div className="grid gap-3 border-t border-[#e5e9e0] p-4 sm:grid-cols-2 lg:grid-cols-4">
+            <AdminMetric label="Position" value={standing ? `#${standing.rank}` : '-'} />
+            <AdminMetric label="Points" value={standing?.points ?? 0} />
+            <AdminMetric label="Goals" value={`${standing?.goalsFor ?? 0}:${standing?.goalsAgainst ?? 0}`} />
+            <AdminMetric label="Form" value={getTeamForm(allMatches, team.id).join(' ') || '-'} />
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
+
+function SearchInput({ onChange, placeholder, value }) {
+  return (
+    <label className="relative block">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#65756b]" />
+      <input
+        className="min-h-11 w-full rounded-lg border border-[#d4dace] bg-white pl-10 pr-3 text-sm outline-none transition focus:border-[#1f6d4d] focus:ring-2 focus:ring-[#b8dcc7]"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        value={value}
+      />
+    </label>
+  )
+}
+
+function CleanPlayerCard({ onClick, player, team }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Open ${player.name} player profile`}
+      className="grid min-h-16 grid-cols-[42px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-[#dce1d7] bg-white px-3 text-left transition hover:border-[#9cb4a5]"
+      onClick={onClick}
+    >
+      <PlayerAvatar player={player} />
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-semibold text-[#14201b]">{player.name}</span>
+        <span className="block truncate text-xs text-[#65756b]">
+          #{player.number} / {team.country}
+        </span>
+      </span>
+      <FlagMark team={team} small />
+    </button>
+  )
+}
+
+function PlayerAvatar({ player, small = false }) {
+  const initials = player?.name
+    ?.split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+
+  return (
+    <span
+      className={`grid shrink-0 place-items-center rounded-full bg-[#eef3e9] font-semibold text-[#34433a] ${
+        small ? 'h-8 w-8 text-xs' : 'h-10 w-10 text-sm'
+      }`}
+      aria-hidden="true"
+    >
+      {initials || <UserRound className="h-4 w-4" />}
+    </span>
+  )
+}
+
+function PlayerPage({ allMatches, onBack, onMatchSelect, onTeamSelect, player, teams }) {
+  const team = getPlayerTeam(player, teams)
+  const contributions = getPlayerContributions(player, allMatches)
+  const playerMatches = getTeamMatches(allMatches, player.teamId)
+  const chartRows = playerMatches.slice(-6).map((match) => {
+    const matchEvents = (match.events ?? []).filter(
+      (event) => event.player === player.name || event.assist === player.name,
+    )
+
+    return {
+      label: formatDate(match.date),
+      goals: matchEvents.filter((event) => event.player === player.name).length,
+      assists: matchEvents.filter((event) => event.assist === player.name).length,
+    }
+  })
+
+  return (
+    <div className="grid min-w-0 gap-4">
+      <DetailTopBar onBack={onBack} title="Player Profile" />
+      <section className="overflow-hidden rounded-xl border border-[#dce1d7] bg-[#10261d] text-white shadow-sm">
+        <div className="flex min-w-0 items-center gap-4 px-4 py-5">
+          <PlayerAvatar player={player} />
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-semibold">{player.name}</h1>
+            <button
+              type="button"
+              className="mt-1 flex min-w-0 items-center gap-2 text-sm text-[#cfe7d8]"
+              onClick={() => team?.id && onTeamSelect(team.id)}
+            >
+              {team && <FlagMark team={team} small />}
+              <span className="truncate">{team?.country} / #{player.number}</span>
+            </button>
+          </div>
+        </div>
+      </section>
+      <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+        <PanelHeader icon={BarChart3} title="Tournament Stats" detail="Current data" />
+        <div className="grid gap-3 border-t border-[#e5e9e0] p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <AdminMetric label="Matches" value={playerMatches.filter(isScoredMatch).length} />
+          <AdminMetric label="Goals" value={player.goals} />
+          <AdminMetric label="Assists" value={player.assists} />
+          <AdminMetric label="Yellow cards" value={player.yellowCards ?? 0} />
+          <AdminMetric label="Red cards" value={player.redCards ?? 0} />
+          <AdminMetric label="Minutes" value="Pending stats" />
+          <AdminMetric label="Shots" value="Pending stats" />
+          <AdminMetric label="Pass accuracy" value="Pending stats" />
+        </div>
+      </section>
+      <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+        <PanelHeader icon={Activity} title="Goals / Assists by Match" detail="Recent fixtures" />
+        <div className="grid gap-3 border-t border-[#e5e9e0] p-4">
+          {chartRows.length ? <PlayerMiniChart rows={chartRows} /> : <EmptyState text="No chart data yet." />}
+        </div>
+      </section>
+      <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+        <PanelHeader icon={Clock} title="Match History" detail="Previous matches" />
+        <div className="divide-y divide-[#e5e9e0] border-t border-[#e5e9e0]">
+          {playerMatches.length ? (
+            playerMatches.map((match) => (
+              <MatchRow
+                key={match.id}
+                match={match}
+                onMatchSelect={onMatchSelect}
+                teams={teams}
+              />
+            ))
+          ) : (
+            <div className="p-4">
+              <EmptyState text="No match history yet." />
+            </div>
+          )}
+        </div>
+      </section>
+      <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+        <PanelHeader icon={Goal} title="Contributions" detail="Goals and assists" />
+        <div className="grid gap-2 border-t border-[#e5e9e0] p-4">
+          {contributions.length ? (
+            contributions.map((event) => (
+              <EventDetailRow
+                key={`${event.match.id}-${event.minute}-${event.contribution}`}
+                event={event}
+                teams={teams}
+              />
+            ))
+          ) : (
+            <EmptyState text="No goals or assists recorded yet." />
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function PlayerMiniChart({ rows }) {
+  const maxValue = Math.max(1, ...rows.map((row) => row.goals + row.assists))
+
+  return (
+    <div className="grid gap-3">
+      {rows.map((row) => {
+        const total = row.goals + row.assists
+
+        return (
+          <div key={row.label} className="grid grid-cols-[58px_minmax(0,1fr)_52px] items-center gap-3">
+            <span className="text-xs font-semibold text-[#65756b]">{row.label}</span>
+            <div className="h-3 overflow-hidden rounded-full bg-[#eef3e9]">
+              <div
+                className="h-full rounded-full bg-[#1f6d4d]"
+                style={{ width: `${(total / maxValue) * 100}%` }}
+              />
+            </div>
+            <span className="text-right text-xs font-semibold text-[#34433a]">
+              {row.goals}G {row.assists}A
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function KnockoutBoard({ matches, onMatchSelect, teams }) {
+  const [activeStage, setActiveStage] = useState('Quarter-final')
+  const [expanded, setExpanded] = useState(false)
+  const stageMatches = matches
+    .filter((match) => match.stage === activeStage)
+    .sort(compareMatchDate)
+
+  return (
+    <div className="grid min-w-0 gap-4">
+      <Toolbar title="Knockout" icon={Trophy}>
+        <button
+          type="button"
+          className="inline-flex min-h-11 items-center gap-2 rounded-md bg-[#163428] px-3 text-sm font-semibold text-white"
+          onClick={() => setExpanded(true)}
+        >
+          <Expand className="h-4 w-4" />
+          Expand
+        </button>
+      </Toolbar>
+      <section className="overflow-hidden rounded-lg border border-[#dce1d7] bg-[#10261d] shadow-sm">
+        <div className="scrollbar-none flex gap-2 overflow-x-auto border-b border-white/10 px-3 py-3">
+          {knockoutStageFilters.map((stage) => (
+            <FilterChip
+              active={activeStage === stage.id}
+              key={stage.id}
+              label={stage.label}
+              onClick={() => setActiveStage(stage.id)}
+            />
+          ))}
+        </div>
+        <div className="grid gap-3 bg-[#07100d] p-3">
+          <section className="overflow-hidden rounded-xl border border-white/10 bg-white">
+            <div className="border-b border-[#e5e9e0] px-4 py-3">
+              <h3 className="text-sm font-semibold text-[#14201b]">
+                {knockoutStageFilters.find((stage) => stage.id === activeStage)?.label}
+              </h3>
+            </div>
+            <div className="divide-y divide-[#e5e9e0]">
+              {stageMatches.length ? (
+                stageMatches.map((match) => (
+                  <MatchRow
+                    key={match.id}
+                    match={match}
+                    onMatchSelect={onMatchSelect}
+                    teams={teams}
+                  />
+                ))
+              ) : (
+                <div className="p-4">
+                  <EmptyState text="No matches available for this stage yet." />
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      </section>
+      <div className="hidden lg:block">
+        <KnockoutPanel matches={matches} teams={teams} />
+      </div>
+      {expanded && (
+        <div className="fixed inset-0 z-50 bg-[#07100d] p-4 text-white">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase text-[#9fb5aa]">Bracket viewer</p>
+              <h2 className="text-lg font-semibold">Knockout path</h2>
+            </div>
+            <button
+              type="button"
+              className="grid h-10 w-10 place-items-center rounded-md bg-white/10"
+              onClick={() => setExpanded(false)}
+              aria-label="Close bracket"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="h-[calc(100vh-84px)] overflow-auto rounded-xl border border-white/10 bg-white p-4 text-[#14201b]">
+            <KnockoutPanel matches={matches} teams={teams} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
