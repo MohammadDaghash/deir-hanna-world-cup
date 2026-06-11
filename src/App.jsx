@@ -458,7 +458,7 @@ function App() {
       <Header activeView={activeView} setActiveView={setActiveView} />
 
       <section className="border-b border-[#dce1d7] bg-[#163428] text-white">
-        <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[1.15fr_0.85fr] lg:px-8">
+        <div className="mx-auto grid w-full max-w-7xl min-w-0 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:px-8">
           <div className="flex min-w-0 flex-col justify-between gap-5">
             <div className="flex flex-wrap items-center gap-3 text-sm text-[#cfe7d8]">
               <span className="inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 py-1">
@@ -483,7 +483,7 @@ function App() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <section className="mx-auto w-full max-w-7xl min-w-0 px-4 py-6 sm:px-6 lg:px-8">
         {appError && <ErrorBanner message={appError} onDismiss={() => setAppError('')} />}
         {activeView === 'overview' && (
           <Overview
@@ -571,7 +571,7 @@ function Header({ activeView, setActiveView }) {
             <p className="truncate text-xs text-[#65756b]">Local tournament dashboard</p>
           </div>
         </div>
-        <nav className="flex gap-2 overflow-x-auto pb-1 lg:pb-0" aria-label="Main views">
+        <nav className="flex min-w-0 flex-wrap gap-2 pb-1 lg:flex-nowrap lg:pb-0" aria-label="Main views">
           {navItems.map((item) => {
             const Icon = item.icon
             const isActive = activeView === item.id
@@ -661,7 +661,7 @@ function Overview({
   votes,
 }) {
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 gap-6">
       <ViewerFocus
         latestResults={latestResults}
         lineups={lineups}
@@ -674,14 +674,14 @@ function Overview({
         votes={votes}
       />
       <StatsGrid stats={stats} />
-      <div className="grid gap-6 lg:grid-cols-[1fr_390px]">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,390px)]">
         <GroupSnapshot standings={standings} />
         <TopContributors
           onPlayerSelect={onPlayerSelect}
           players={leaderboards.contributions.slice(0, 5)}
         />
       </div>
-      <div className="grid gap-6 lg:grid-cols-[1fr_390px]">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,390px)]">
         <UpcomingPanel
           matches={upcomingMatches.slice(0, 6)}
           onVote={onVote}
@@ -710,8 +710,8 @@ function ViewerFocus({
   const focusMatch = liveMatch?.status === 'live' ? liveMatch : upcomingMatches[0]
 
   return (
-    <section className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-      <div className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+    <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+      <div className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
         <PanelHeader
           icon={focusMatch?.status === 'live' ? Timer : CalendarDays}
           title={focusMatch?.status === 'live' ? 'Live Now' : 'Next Match'}
@@ -730,7 +730,7 @@ function ViewerFocus({
           )}
         </div>
       </div>
-      <div className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <div className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
         <PanelHeader icon={Trophy} title="Qualification Race" detail="Current top two" />
         <div className="grid gap-2 border-t border-[#e5e9e0] p-4">
           {groups.map((group) => (
@@ -738,7 +738,7 @@ function ViewerFocus({
           ))}
         </div>
       </div>
-      <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm lg:col-span-2">
+      <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm lg:col-span-2">
         <PanelHeader icon={Clock} title="Latest Results" detail="Completed games" />
         <div className="divide-y divide-[#e5e9e0] border-t border-[#e5e9e0]">
           {latestResults.length ? (
@@ -787,7 +787,7 @@ function FocusMatchCard({ match, onVote, teams, votes }) {
 
   return (
     <div className="grid gap-4">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-lg bg-[#f8faf5] p-4">
+      <div className="grid gap-3 rounded-lg bg-[#f8faf5] p-4 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
         <TeamBlock team={home} align="right" />
         <ScoreCell match={match} />
         <TeamBlock team={away} />
@@ -813,7 +813,7 @@ function QualificationRow({ group, rows }) {
   const leaders = rows.slice(0, 2)
 
   return (
-    <div className="grid min-h-12 grid-cols-[64px_1fr] items-center gap-3 rounded-lg bg-[#f8faf5] px-3">
+    <div className="grid min-h-12 grid-cols-[64px_minmax(0,1fr)] items-center gap-3 rounded-lg bg-[#f8faf5] px-3">
       <span className="text-xs font-semibold uppercase text-[#65756b]">Group {group}</span>
       <div className="flex min-w-0 flex-wrap gap-2">
         {leaders.map((row) => (
@@ -840,7 +840,7 @@ function TeamsBoard({ onPlayerSelect, playersByTeam, teams }) {
   const selectedTeam = teams.find((team) => team.id === selectedTeamId)
 
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4">
       <Toolbar title="Teams & Squads" icon={Users}>
         {filters.map((item) => (
           <button
@@ -857,7 +857,7 @@ function TeamsBoard({ onPlayerSelect, playersByTeam, teams }) {
           </button>
         ))}
       </Toolbar>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {visibleTeams.map((team) => (
           <TeamCard
             key={team.id}
@@ -886,7 +886,7 @@ function TeamCard({ onClick, team, players }) {
   return (
     <button
       type="button"
-      className="overflow-hidden rounded-lg border border-[#dce1d7] bg-white text-left shadow-sm transition hover:border-[#9cb4a5] hover:shadow-md"
+      className="min-w-0 overflow-hidden rounded-lg border border-[#dce1d7] bg-white text-left shadow-sm transition hover:border-[#9cb4a5] hover:shadow-md"
       onClick={onClick}
     >
       <div className="flex items-center justify-between gap-4 px-4 py-4">
@@ -918,7 +918,7 @@ function TeamCard({ onClick, team, players }) {
 function TeamCardMetric({ label, value }) {
   return (
     <div className="border-r border-[#e5e9e0] px-3 py-3 last:border-r-0">
-      <p className="text-xs font-semibold uppercase text-[#65756b]">{label}</p>
+      <p className="text-[11px] font-semibold uppercase text-[#65756b] sm:text-xs">{label}</p>
       <p className="mt-1 text-lg font-semibold text-[#14201b]">{value}</p>
     </div>
   )
@@ -1017,7 +1017,7 @@ function PlayerCard({ onClick, player }) {
   return (
     <button
       type="button"
-      className="grid min-h-14 grid-cols-[42px_1fr_auto] items-center gap-3 rounded-lg border border-[#dce1d7] bg-white px-3 text-left transition hover:border-[#9cb4a5]"
+      className="grid min-h-14 min-w-0 grid-cols-[42px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-[#dce1d7] bg-white px-3 text-left transition hover:border-[#9cb4a5]"
       onClick={onClick}
     >
       <span className="grid h-8 w-8 place-items-center rounded-md bg-[#eef3e9] text-xs font-semibold text-[#34433a]">
@@ -1182,7 +1182,7 @@ function EventDetailRow({ event, teams }) {
       : `Goal: ${event.player}`
 
   return (
-    <div className="grid min-h-12 grid-cols-[42px_1fr_auto] items-center gap-3 rounded-lg bg-[#f8faf5] px-3">
+    <div className="grid min-h-12 grid-cols-[42px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg bg-[#f8faf5] px-3">
       <span className="text-xs font-semibold text-[#65756b]">{event.minute}'</span>
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-[#14201b]">{primaryText}</p>
@@ -1200,7 +1200,7 @@ function CompactMatchDetail({ match, teams }) {
   const away = getMatchTeam(match, teams, 'away')
 
   return (
-    <div className="grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-lg bg-[#f8faf5] px-3">
+    <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-lg bg-[#f8faf5] px-3 sm:gap-3">
       <TeamMini team={home} align="right" />
       <ScoreCell match={match} />
       <TeamMini team={away} />
@@ -1210,14 +1210,14 @@ function CompactMatchDetail({ match, teams }) {
 
 function StatsGrid({ stats }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {stats.map((stat, index) => {
         const Icon = statIcons[index] ?? BarChart3
 
         return (
           <div
             key={stat.label}
-            className="rounded-lg border border-[#dce1d7] bg-white px-4 py-4 shadow-sm"
+            className="min-w-0 rounded-lg border border-[#dce1d7] bg-white px-4 py-4 shadow-sm"
           >
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -1249,17 +1249,17 @@ function LiveMatch({ match, teams }) {
     : `${formatDate(match.date)} / ${match.time}`
 
   return (
-    <div className="rounded-lg border border-white/15 bg-white text-[#14201b] shadow-md">
-      <div className="flex items-center justify-between border-b border-[#e5e9e0] px-4 py-3">
-        <div>
+    <div className="min-w-0 rounded-lg border border-white/15 bg-white text-[#14201b] shadow-md">
+      <div className="flex min-w-0 items-center justify-between gap-3 border-b border-[#e5e9e0] px-4 py-3">
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase text-[#65756b]">{label}</p>
-          <p className="mt-1 text-sm text-[#34433a]">
+          <p className="mt-1 truncate text-sm text-[#34433a]">
             {detail}
           </p>
         </div>
         <StatusPill status={match.status} />
       </div>
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-5">
+      <div className="grid gap-3 px-4 py-5 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
         <TeamBlock team={home} align="right" />
         <div className="min-w-24 rounded-lg bg-[#14201b] px-4 py-3 text-center text-white">
           <p className="text-3xl font-semibold leading-none">
@@ -1317,7 +1317,7 @@ function StatusPill({ status }) {
 
   return (
     <span
-      className={`inline-flex min-h-7 items-center rounded-md px-2.5 text-xs font-semibold uppercase ${
+      className={`inline-flex min-h-7 shrink-0 items-center rounded-md px-2.5 text-xs font-semibold uppercase ${
         styles[status] ?? styles.scheduled
       }`}
     >
@@ -1328,11 +1328,11 @@ function StatusPill({ status }) {
 
 function GroupSnapshot({ standings }) {
   return (
-    <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
       <PanelHeader icon={Table2} title="Group Tables" detail="Top two advance" />
-      <div className="grid border-t border-[#e5e9e0] md:grid-cols-2">
+      <div className="grid min-w-0 border-t border-[#e5e9e0] md:grid-cols-2">
         {groups.map((group) => (
-          <div key={group} className="border-b border-[#e5e9e0] p-4 md:border-r">
+          <div key={group} className="min-w-0 border-b border-[#e5e9e0] p-4 md:border-r">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-semibold">Group {group}</h2>
               <span className="text-xs font-semibold text-[#65756b]">P / GD / PTS</span>
@@ -1351,7 +1351,7 @@ function GroupSnapshot({ standings }) {
 
 function CompactStandingRow({ row }) {
   return (
-    <div className="grid min-h-12 grid-cols-[28px_1fr_auto] items-center gap-3 rounded-md bg-[#f8faf5] px-3">
+    <div className="grid min-h-12 grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2 rounded-md bg-[#f8faf5] px-3 sm:gap-3">
       <span
         className={`grid h-7 w-7 place-items-center rounded-md text-xs font-semibold ${
           row.qualified ? 'bg-[#dff1e6] text-[#17633f]' : 'bg-[#ecefe8] text-[#65756b]'
@@ -1373,7 +1373,7 @@ function CompactStandingRow({ row }) {
 
 function TopContributors({ onPlayerSelect, players }) {
   return (
-    <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
       <PanelHeader icon={Medal} title="Goal Contributions" detail="Goals + assists" />
       <div className="divide-y divide-[#e5e9e0] border-t border-[#e5e9e0]">
         {players.length ? (
@@ -1399,7 +1399,7 @@ function TopContributors({ onPlayerSelect, players }) {
 
 function UpcomingPanel({ matches, onVote, teams, votes }) {
   return (
-    <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
       <PanelHeader icon={CalendarDays} title="Upcoming Matches" detail="Schedule" />
       <div className="divide-y divide-[#e5e9e0] border-t border-[#e5e9e0]">
         {matches.length ? (
@@ -1427,9 +1427,9 @@ function MatchTimeline({ match, teams }) {
   const detail = match?.status === 'live' && match.minute ? `${match.minute}'` : 'Updates'
 
   return (
-    <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
       <PanelHeader icon={Clock} title="Match Timeline" detail={detail} />
-      <div className="grid gap-3 border-t border-[#e5e9e0] p-4">
+      <div className="grid min-w-0 gap-3 border-t border-[#e5e9e0] p-4">
         {events.length ? (
           events.map((event) => {
             const team = teams.find((item) => item.id === event.teamId)
@@ -1486,7 +1486,7 @@ function MatchesBoard({ lineups, matches, onVote, playersById, teams, votes }) {
   })
 
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4">
       <Toolbar title="Matches" icon={CalendarDays}>
         {filters.map((item) => (
           <button
@@ -1526,7 +1526,7 @@ function MatchesBoard({ lineups, matches, onVote, playersById, teams, votes }) {
           </button>
         )}
       </div>
-      <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
         <div className="divide-y divide-[#e5e9e0]">
           {visibleMatches.length ? (
             visibleMatches.map((match) => {
@@ -1598,10 +1598,10 @@ function MatchRow({
 
   return (
     <article
-      className={`${expanded ? 'cursor-pointer transition hover:bg-[#fbfdf9]' : ''}`}
+      className={`min-w-0 ${expanded ? 'cursor-pointer transition hover:bg-[#fbfdf9]' : ''}`}
       {...clickableProps}
     >
-      <div className="grid gap-3 px-4 py-4 sm:grid-cols-[180px_1fr_auto] sm:items-center">
+      <div className="grid min-w-0 gap-3 px-3 py-4 sm:grid-cols-[180px_minmax(0,1fr)_auto] sm:items-center sm:px-4">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-[#14201b]">
             {match.stage}
@@ -1612,7 +1612,7 @@ function MatchRow({
           </p>
           {expanded && <p className="mt-1 truncate text-xs text-[#65756b]">{match.venue}</p>}
         </div>
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3">
           <TeamMini team={home} align="right" />
           <ScoreCell match={match} />
           <TeamMini team={away} />
@@ -1709,7 +1709,7 @@ function PredictionVote({ compact = false, match, onVote, teams, votes }) {
 
   return (
     <section
-      className={`rounded-lg border border-[#dce1d7] bg-white ${
+      className={`min-w-0 rounded-lg border border-[#dce1d7] bg-white ${
         compact ? 'p-3' : 'p-4'
       }`}
       onClick={(event) => event.stopPropagation()}
@@ -1733,10 +1733,10 @@ function PredictionVote({ compact = false, match, onVote, teams, votes }) {
         )}
       </div>
       <div
-        className={`grid gap-2 ${
+        className={`grid min-w-0 gap-2 ${
           breakdown.hasDraw
-            ? 'sm:grid-cols-[1fr_120px_1fr]'
-            : 'sm:grid-cols-[1fr_auto_1fr]'
+            ? 'sm:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)]'
+            : 'sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'
         } sm:items-center`}
       >
         <VoteTeamButton
@@ -1775,7 +1775,7 @@ function VoteDrawButton({ active, onClick, percent, votes }) {
   return (
     <button
       type="button"
-      className={`relative min-h-16 overflow-hidden rounded-lg border px-3 py-3 text-center transition ${
+      className={`relative min-h-16 min-w-0 overflow-hidden rounded-lg border px-3 py-3 text-center transition ${
         active
           ? 'border-[#17633f] bg-[#f2fbf5]'
           : 'border-[#dce1d7] bg-[#fbfdf9] hover:border-[#9cb4a5]'
@@ -1799,7 +1799,7 @@ function VoteTeamButton({ active, align = 'left', onClick, percent, team, votes 
   return (
     <button
       type="button"
-      className={`relative min-h-16 overflow-hidden rounded-lg border px-3 py-3 text-left transition ${
+      className={`relative min-h-16 min-w-0 overflow-hidden rounded-lg border px-3 py-3 text-left transition ${
         active
           ? 'border-[#17633f] bg-[#f2fbf5]'
           : 'border-[#dce1d7] bg-[#fbfdf9] hover:border-[#9cb4a5]'
@@ -1814,7 +1814,7 @@ function VoteTeamButton({ active, align = 'left', onClick, percent, team, votes 
         aria-hidden="true"
       />
       <span
-        className={`relative z-10 flex items-center gap-3 ${
+        className={`relative z-10 flex min-w-0 items-center gap-3 ${
           align === 'right' ? 'justify-end text-right' : ''
         }`}
       >
@@ -1846,7 +1846,7 @@ function VoteTeamButton({ active, align = 'left', onClick, percent, team, votes 
 
 function MatchDetailsPanel({ lineups, match, onVote, playersById, teams, votes }) {
   return (
-    <div className="grid gap-4 border-t border-[#e5e9e0] bg-[#fbfdf9] px-4 py-4">
+    <div className="grid min-w-0 gap-4 border-t border-[#e5e9e0] bg-[#fbfdf9] px-3 py-4 sm:px-4">
       {match.status === 'scheduled' && match.homeTeamId && match.awayTeamId && (
         <PredictionVote match={match} onVote={onVote} teams={teams} votes={votes} />
       )}
@@ -1860,9 +1860,9 @@ function ScoringSummary({ match, teams }) {
   const scoringEvents = (match.events ?? []).filter((event) => event.type === 'goal')
 
   return (
-    <section className="rounded-lg border border-[#dce1d7] bg-white">
-      <div className="flex items-center justify-between gap-4 border-b border-[#e5e9e0] px-4 py-3">
-        <div>
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white">
+      <div className="flex min-w-0 items-center justify-between gap-4 border-b border-[#e5e9e0] px-4 py-3">
+        <div className="min-w-0">
           <h3 className="text-sm font-semibold text-[#14201b]">Scorers & Assists</h3>
           <p className="text-xs text-[#65756b]">
             {formatDate(match.date)} / {match.time}
@@ -1887,7 +1887,7 @@ function GoalEventRow({ event, teams }) {
   const team = teams.find((item) => item.id === event.teamId)
 
   return (
-    <div className="grid min-h-12 grid-cols-[42px_30px_1fr] items-center gap-3 rounded-lg bg-[#f8faf5] px-3">
+    <div className="grid min-h-12 grid-cols-[42px_30px_minmax(0,1fr)] items-center gap-3 rounded-lg bg-[#f8faf5] px-3">
       <span className="text-xs font-semibold text-[#65756b]">{event.minute}'</span>
       {team && <FlagMark team={team} small />}
       <div className="min-w-0">
@@ -1919,7 +1919,7 @@ function LineupsPanel({ lineups, match, playersById, teams }) {
   const awayLineup = resolveLineup(matchLineups.away, playersById)
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid min-w-0 gap-4 lg:grid-cols-2">
       <LineupTeamColumn lineup={homeLineup} side="home" team={home} />
       <LineupTeamColumn lineup={awayLineup} side="away" team={away} />
     </div>
@@ -1928,8 +1928,8 @@ function LineupsPanel({ lineups, match, playersById, teams }) {
 
 function LineupTeamColumn({ team, lineup, side }) {
   return (
-    <section className="rounded-lg border border-[#dce1d7] bg-white">
-      <div className="flex items-center justify-between gap-4 border-b border-[#e5e9e0] px-4 py-3">
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white">
+      <div className="flex min-w-0 items-center justify-between gap-4 border-b border-[#e5e9e0] px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <FlagMark team={team} small />
           <div className="min-w-0">
@@ -1969,7 +1969,7 @@ function LineupList({ title, players }) {
 
 function LineupPlayerRow({ player }) {
   return (
-    <li className="grid min-h-10 grid-cols-[36px_1fr_auto] items-center gap-3 rounded-md bg-[#f8faf5] px-3">
+    <li className="grid min-h-10 grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-[#f8faf5] px-3">
       <span className="grid h-7 w-7 place-items-center rounded-md bg-white text-xs font-semibold text-[#34433a]">
         {player.number}
       </span>
@@ -2016,8 +2016,10 @@ function ScoreCell({ match }) {
 }
 
 function TablesBoard({ selectedGroup, setSelectedGroup, standings }) {
+  const selectedRows = standings[selectedGroup] ?? []
+
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4">
       <Toolbar title="Group Tables" icon={Table2}>
         {groups.map((group) => (
           <button
@@ -2035,7 +2037,12 @@ function TablesBoard({ selectedGroup, setSelectedGroup, standings }) {
           </button>
         ))}
       </Toolbar>
-      <section className="overflow-hidden rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <section className="grid gap-3 md:hidden">
+        {selectedRows.map((row) => (
+          <MobileStandingCard key={row.team.id} row={row} />
+        ))}
+      </section>
+      <section className="hidden overflow-hidden rounded-lg border border-[#dce1d7] bg-white shadow-sm md:block">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] border-collapse text-sm">
             <thead className="bg-[#eef3e9] text-xs uppercase text-[#65756b]">
@@ -2053,7 +2060,7 @@ function TablesBoard({ selectedGroup, setSelectedGroup, standings }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e5e9e0]">
-              {standings[selectedGroup].map((row) => (
+              {selectedRows.map((row) => (
                 <tr key={row.team.id} className={row.qualified ? 'bg-[#fbfdf9]' : ''}>
                   <td className="px-4 py-4">
                     <span
@@ -2094,6 +2101,56 @@ function TablesBoard({ selectedGroup, setSelectedGroup, standings }) {
         </div>
       </section>
     </div>
+  )
+}
+
+function MobileStandingCard({ row }) {
+  const stats = [
+    ['P', row.played],
+    ['W', row.won],
+    ['D', row.drawn],
+    ['L', row.lost],
+    ['GF:GA', `${row.goalsFor}:${row.goalsAgainst}`],
+    ['GD', `${row.goalDifference > 0 ? '+' : ''}${row.goalDifference}`],
+  ]
+
+  return (
+    <article
+      className={`overflow-hidden rounded-lg border bg-white shadow-sm ${
+        row.qualified ? 'border-[#b8dcc7]' : 'border-[#dce1d7]'
+      }`}
+    >
+      <div className="grid min-h-16 grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3">
+        <span
+          className={`grid h-8 w-8 place-items-center rounded-md text-xs font-semibold ${
+            row.qualified
+              ? 'bg-[#dff1e6] text-[#17633f]'
+              : 'bg-[#ecefe8] text-[#65756b]'
+          }`}
+        >
+          {row.rank}
+        </span>
+        <div className="flex min-w-0 items-center gap-3">
+          <FlagMark team={row.team} small />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-[#14201b]">{row.team.country}</p>
+            <p className="truncate text-xs text-[#65756b]">{row.team.code}</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-xl font-semibold leading-none text-[#14201b]">{row.points}</p>
+          <p className="mt-1 text-xs font-semibold uppercase text-[#65756b]">pts</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 border-t border-[#e5e9e0] bg-[#fbfdf9]">
+        {stats.map(([label, value]) => (
+          <div key={label} className="border-r border-b border-[#e5e9e0] px-3 py-2 last:border-r-0">
+            <p className="text-[11px] font-semibold uppercase text-[#65756b]">{label}</p>
+            <p className="mt-1 text-sm font-semibold text-[#34433a]">{value}</p>
+          </div>
+        ))}
+      </div>
+    </article>
   )
 }
 
@@ -2153,7 +2210,7 @@ function PlayerStatRow({ onPlayerSelect, player, index, value, label }) {
   return (
     <button
       type="button"
-      className="grid min-h-16 w-full grid-cols-[32px_1fr_auto] items-center gap-3 px-4 py-3 text-left transition hover:bg-[#fbfdf9]"
+      className="grid min-h-16 w-full min-w-0 grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition hover:bg-[#fbfdf9]"
       onClick={() => onPlayerSelect?.(player.id)}
     >
       <span className="grid h-8 w-8 place-items-center rounded-md bg-[#eef3e9] text-xs font-semibold text-[#34433a]">
@@ -2192,48 +2249,175 @@ function KnockoutPanel({ matches, teams }) {
   ])
 
   return (
-    <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
       <PanelHeader icon={Trophy} title="Knockout Path" detail="Single-game bracket" />
-      <div className="knockout-path border-t border-[#e5e9e0] p-4">
-        <TeamPathColumn labels={leftTeams} side="left" />
-        <BracketRound
-          matches={leftQuarters}
-          pathOnly
-          side="left"
-          teams={teams}
-          title="Quarter-finals"
-        />
-        <BracketRound
-          center
-          matches={semiFinals.slice(0, 1)}
-          side="left"
-          teams={teams}
-          title="Semi-final"
-        />
-        <FinalNode match={finalMatch} teams={teams} />
-        <BracketRound
-          center
-          matches={semiFinals.slice(1, 2)}
-          side="right"
-          teams={teams}
-          title="Semi-final"
-        />
-        <BracketRound
-          matches={rightQuarters}
-          pathOnly
-          side="right"
-          teams={teams}
-          title="Quarter-finals"
-        />
-        <TeamPathColumn labels={rightTeams} side="right" />
+      <div className="hidden min-w-0 overflow-x-auto border-t border-[#e5e9e0] p-4 lg:block">
+        <div className="knockout-path">
+          <TeamPathColumn labels={leftTeams} side="left" />
+          <BracketRound
+            matches={leftQuarters}
+            pathOnly
+            side="left"
+            teams={teams}
+            title="Quarter-finals"
+          />
+          <BracketRound
+            center
+            matches={semiFinals.slice(0, 1)}
+            side="left"
+            teams={teams}
+            title="Semi-final"
+          />
+          <FinalNode match={finalMatch} teams={teams} />
+          <BracketRound
+            center
+            matches={semiFinals.slice(1, 2)}
+            side="right"
+            teams={teams}
+            title="Semi-final"
+          />
+          <BracketRound
+            matches={rightQuarters}
+            pathOnly
+            side="right"
+            teams={teams}
+            title="Quarter-finals"
+          />
+          <TeamPathColumn labels={rightTeams} side="right" />
+        </div>
       </div>
+      <MobileKnockoutPath
+        finalMatch={finalMatch}
+        quarterFinals={quarterFinals}
+        semiFinals={semiFinals}
+        teams={teams}
+      />
     </section>
   )
 }
 
 function getNeutralTeamLabel(match, teams, side) {
   const team = getMatchTeam(match, teams, side)
-  return team.country
+  return team?.country ?? 'TBD'
+}
+
+function MobileKnockoutPath({ finalMatch, quarterFinals, semiFinals, teams }) {
+  const stages = [
+    {
+      title: 'Quarter-finals',
+      detail: 'Eight teams enter',
+      matches: quarterFinals,
+    },
+    {
+      title: 'Semi-finals',
+      detail: 'Quarter-final winners',
+      matches: semiFinals,
+    },
+    {
+      title: 'Final',
+      detail: 'Semi-final winners',
+      matches: finalMatch ? [finalMatch] : [],
+      finalStage: true,
+    },
+  ].filter((stage) => stage.matches.length)
+
+  return (
+    <div className="grid gap-4 border-t border-[#e5e9e0] p-3 lg:hidden">
+      {stages.map((stage, index) => (
+        <div key={stage.title} className="grid gap-3">
+          {index > 0 && <MobileAdvanceConnector label="Winners advance" />}
+          <MobileBracketStage
+            detail={stage.detail}
+            finalStage={stage.finalStage}
+            matches={stage.matches}
+            teams={teams}
+            title={stage.title}
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MobileAdvanceConnector({ label }) {
+  return (
+    <div className="grid justify-items-center gap-2 text-center">
+      <span className="h-6 w-px bg-[#94aa9c]" aria-hidden="true" />
+      <span className="rounded-md bg-[#eef3e9] px-3 py-1 text-xs font-semibold uppercase text-[#65756b]">
+        {label}
+      </span>
+    </div>
+  )
+}
+
+function MobileBracketStage({ detail, finalStage = false, matches, teams, title }) {
+  return (
+    <section className="grid gap-3">
+      <div className="flex min-w-0 items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold uppercase text-[#14201b]">{title}</h3>
+          <p className="truncate text-xs text-[#65756b]">{detail}</p>
+        </div>
+        <span className="rounded-md bg-[#f8faf5] px-2.5 py-1 text-xs font-semibold text-[#65756b]">
+          {matches.length} game{matches.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      <div className="grid gap-3">
+        {matches.map((match) => (
+          <MobileBracketMatch
+            finalStage={finalStage}
+            key={match.id}
+            match={match}
+            teams={teams}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function MobileBracketMatch({ finalStage = false, match, teams }) {
+  const home = getMatchTeam(match, teams, 'home')
+  const away = getMatchTeam(match, teams, 'away')
+
+  return (
+    <article className="rounded-lg border border-[#dce1d7] bg-white p-3 shadow-sm">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <span className="truncate text-xs font-semibold uppercase text-[#65756b]">
+          {formatDate(match.date)} / {match.time}
+        </span>
+        <StatusPill status={match.status} />
+      </div>
+      <div className="mt-3 grid gap-2">
+        <MobileBracketTeam team={home} />
+        <MobileBracketTeam team={away} />
+      </div>
+      <div className="mt-3 flex min-w-0 items-center justify-between gap-3 border-t border-[#e5e9e0] pt-3">
+        <p className="truncate text-xs text-[#65756b]">{match.venue}</p>
+        <span className="shrink-0 text-xs font-semibold text-[#17633f]">
+          {finalStage ? 'Champion decided' : 'Winner advances'}
+        </span>
+      </div>
+    </article>
+  )
+}
+
+function MobileBracketTeam({ team }) {
+  const displayTeam = team ?? {
+    country: 'TBD',
+    code: 'TBD',
+    color: '#bfc9bb',
+    secondary: '#eef3e9',
+  }
+
+  return (
+    <div className="grid min-h-11 grid-cols-[30px_minmax(0,1fr)] items-center gap-3 rounded-md bg-[#f8faf5] px-3">
+      <FlagMark team={displayTeam} small />
+      <span className="truncate text-sm font-semibold text-[#34433a]">
+        {displayTeam.country}
+      </span>
+    </div>
+  )
 }
 
 function TeamPathColumn({ labels, side }) {
@@ -2448,11 +2632,11 @@ function AdminBoard({
   }
 
   return (
-    <div className="grid gap-6">
-      <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-        <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+    <div className="grid min-w-0 gap-6">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+        <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
           <PanelHeader icon={LockKeyhole} title="Admin Access" detail="Control panel" />
-          <div className="grid gap-4 border-t border-[#e5e9e0] p-4">
+          <div className="grid min-w-0 gap-4 border-t border-[#e5e9e0] p-4">
             {adminEmail ? (
               <div className="grid gap-3">
                 <div className="rounded-md bg-[#eef3e9] px-3 py-3 text-sm text-[#34433a]">
@@ -2473,7 +2657,7 @@ function AdminBoard({
                 </button>
               </div>
             ) : (
-              <form className="grid gap-3" onSubmit={submitAdminLogin}>
+              <form className="grid min-w-0 gap-3" onSubmit={submitAdminLogin}>
                 <AdminTextInput
                   disabled={false}
                   label="Admin email"
@@ -2496,14 +2680,14 @@ function AdminBoard({
                 {authNotice}
               </div>
             )}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid min-w-0 grid-cols-2 gap-3">
               <AdminMetric label="Teams" value={teams.length} />
               <AdminMetric label="Players" value={players.length} />
             </div>
           </div>
         </section>
 
-        <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+        <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
           <PanelHeader icon={PencilLine} title="Edit Match" detail="Score and details" />
           <EditMatchForm
             key={effectiveSelectedMatchId}
@@ -2518,10 +2702,10 @@ function AdminBoard({
         </section>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-3">
+        <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
           <PanelHeader icon={ShieldCheck} title="Add Team" detail="Tournament setup" />
-          <form className="grid gap-4 border-t border-[#e5e9e0] p-4" onSubmit={submitTeam}>
+          <form className="grid min-w-0 gap-4 border-t border-[#e5e9e0] p-4" onSubmit={submitTeam}>
             <AdminTextInput
               disabled={disabled}
               label="Team name"
@@ -2566,9 +2750,9 @@ function AdminBoard({
           </form>
         </section>
 
-        <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+        <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
           <PanelHeader icon={Users} title="Add Player" detail="Squad management" />
-          <form className="grid gap-4 border-t border-[#e5e9e0] p-4" onSubmit={submitPlayer}>
+          <form className="grid min-w-0 gap-4 border-t border-[#e5e9e0] p-4" onSubmit={submitPlayer}>
             <div className="rounded-md bg-[#eef3e9] px-3 py-3 text-sm text-[#34433a]">
               Squad slots: {selectedTeamPlayerCount}/{maxSquadPlayers}
             </div>
@@ -2611,9 +2795,9 @@ function AdminBoard({
           </form>
         </section>
 
-        <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+        <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
           <PanelHeader icon={CalendarDays} title="Add Match" detail="Fixture setup" />
-          <form className="grid gap-4 border-t border-[#e5e9e0] p-4" onSubmit={submitNewMatch}>
+          <form className="grid min-w-0 gap-4 border-t border-[#e5e9e0] p-4" onSubmit={submitNewMatch}>
             <MatchDraftFields
               disabled={disabled}
               draft={newMatchDraft}
@@ -2625,9 +2809,9 @@ function AdminBoard({
         </section>
       </div>
 
-      <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
         <PanelHeader icon={Smartphone} title="Version Roadmap" detail="MVP first" />
-        <div className="grid gap-3 border-t border-[#e5e9e0] p-4 md:grid-cols-3">
+        <div className="grid min-w-0 gap-3 border-t border-[#e5e9e0] p-4 md:grid-cols-3">
           <RoadmapItem title="Public dashboard" detail="Fixtures, live scores, tables, leaders" />
           <RoadmapItem title="Admin updates" detail="Secure score and event entry" />
           <RoadmapItem title="PWA release" detail="Installable QR-code access" />
@@ -2643,7 +2827,7 @@ function MatchDraftFields({ disabled, draft, setDraft, teamOptions }) {
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4">
       <FieldGrid>
         <AdminSelect
           disabled={disabled}
@@ -2767,7 +2951,7 @@ function EditMatchForm({
   }
 
   return (
-    <form className="grid gap-4 border-t border-[#e5e9e0] p-4" onSubmit={submitEditMatch}>
+    <form className="grid min-w-0 gap-4 border-t border-[#e5e9e0] p-4" onSubmit={submitEditMatch}>
       <AdminSelect
         disabled={disabled || !matchOptions.length}
         label="Match"
@@ -2833,9 +3017,9 @@ function MatchEventsEditor({ disabled, draft, setDraft, teamOptions }) {
   }
 
   return (
-    <section className="rounded-lg border border-[#dce1d7] bg-[#fbfdf9] p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-[#fbfdf9] p-4">
+      <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+        <div className="min-w-0">
           <h3 className="text-sm font-semibold text-[#14201b]">Scorers & Assists</h3>
           <p className="text-xs text-[#65756b]">Saved as match events</p>
         </div>
@@ -2848,12 +3032,12 @@ function MatchEventsEditor({ disabled, draft, setDraft, teamOptions }) {
           Add goal
         </button>
       </div>
-      <div className="grid gap-3">
+      <div className="grid min-w-0 gap-3">
         {events.length ? (
           events.map((event, index) => (
             <div
               key={`event-${index}`}
-              className="grid gap-3 rounded-md border border-[#dce1d7] bg-white p-3"
+              className="grid min-w-0 gap-3 rounded-md border border-[#dce1d7] bg-white p-3"
             >
               <FieldGrid>
                 <AdminTextInput
@@ -2908,7 +3092,7 @@ function MatchEventsEditor({ disabled, draft, setDraft, teamOptions }) {
 
 function AdminMetric({ label, value }) {
   return (
-    <div className="rounded-md bg-[#eef3e9] px-3 py-3">
+    <div className="min-w-0 rounded-md bg-[#eef3e9] px-3 py-3">
       <p className="text-xs font-semibold uppercase text-[#65756b]">{label}</p>
       <p className="mt-1 break-words text-lg font-semibold leading-tight text-[#14201b]">
         {value}
@@ -2918,7 +3102,7 @@ function AdminMetric({ label, value }) {
 }
 
 function FieldGrid({ children }) {
-  return <div className="grid gap-3 sm:grid-cols-2">{children}</div>
+  return <div className="grid min-w-0 gap-3 sm:grid-cols-2">{children}</div>
 }
 
 function AdminTextInput({
@@ -2932,10 +3116,10 @@ function AdminTextInput({
   value,
 }) {
   return (
-    <label className="grid gap-2 text-sm font-medium text-[#34433a]">
+    <label className="grid min-w-0 gap-2 text-sm font-medium text-[#34433a]">
       {label}
       <input
-        className="min-h-11 rounded-md border border-[#d4dace] bg-[#fbfdf9] px-3 outline-none transition focus:border-[#1f6d4d] focus:ring-2 focus:ring-[#b8dcc7] disabled:bg-[#eef1ea]"
+        className="min-h-11 w-full min-w-0 rounded-md border border-[#d4dace] bg-[#fbfdf9] px-3 outline-none transition focus:border-[#1f6d4d] focus:ring-2 focus:ring-[#b8dcc7] disabled:bg-[#eef1ea]"
         disabled={disabled}
         maxLength={maxLength}
         min={min}
@@ -2950,10 +3134,10 @@ function AdminTextInput({
 
 function AdminSelect({ disabled, label, onChange, options, value }) {
   return (
-    <label className="grid gap-2 text-sm font-medium text-[#34433a]">
+    <label className="grid min-w-0 gap-2 text-sm font-medium text-[#34433a]">
       {label}
       <select
-        className="min-h-11 rounded-md border border-[#d4dace] bg-[#fbfdf9] px-3 outline-none transition focus:border-[#1f6d4d] focus:ring-2 focus:ring-[#b8dcc7] disabled:bg-[#eef1ea]"
+        className="min-h-11 w-full min-w-0 rounded-md border border-[#d4dace] bg-[#fbfdf9] px-3 outline-none transition focus:border-[#1f6d4d] focus:ring-2 focus:ring-[#b8dcc7] disabled:bg-[#eef1ea]"
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         value={value}
@@ -3008,14 +3192,14 @@ function PanelHeader({ icon: Icon, title, detail }) {
 
 function Toolbar({ title, icon: Icon, children }) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-3">
+    <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-lg bg-[#163428] text-white">
           <Icon className="h-5 w-5" />
         </div>
-        <h2 className="text-xl font-semibold text-[#14201b]">{title}</h2>
+        <h2 className="min-w-0 truncate text-xl font-semibold text-[#14201b]">{title}</h2>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0">{children}</div>
+      <div className="flex min-w-0 flex-wrap gap-2 pb-1 sm:justify-end sm:pb-0">{children}</div>
     </div>
   )
 }

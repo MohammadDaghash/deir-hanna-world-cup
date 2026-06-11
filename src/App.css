@@ -43,7 +43,6 @@
   grid-template-columns: 150px 180px 180px minmax(190px, 1fr) 180px 180px 150px;
   align-items: center;
   gap: 22px;
-  overflow-x: auto;
 }
 
 .team-path-column,
