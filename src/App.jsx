@@ -81,7 +81,6 @@ const stageOptions = [
   { label: 'Group', value: 'Group' },
   { label: 'Quarter-final', value: 'Quarter-final' },
   { label: 'Semi-final', value: 'Semi-final' },
-  { label: 'Third place', value: 'Third place' },
   { label: 'Final', value: 'Final' },
 ]
 const statusOptions = [
@@ -115,13 +114,11 @@ const roundFilterOptions = [
   { id: 'group-3', label: 'Group Stage Round 3' },
   { id: 'Quarter-final', label: 'Quarter-finals' },
   { id: 'Semi-final', label: 'Semi-finals' },
-  { id: 'Third place', label: 'Third Place' },
   { id: 'Final', label: 'Final' },
 ]
 const knockoutStageFilters = [
   { id: 'Quarter-final', label: 'Quarter-finals' },
   { id: 'Semi-final', label: 'Semi-finals' },
-  { id: 'Third place', label: 'Third Place' },
   { id: 'Final', label: 'Final' },
 ]
 const detailTabs = ['Details', 'Lineups', 'Standings', 'Matches']
@@ -233,7 +230,6 @@ function getMatchRoundLabel(match) {
 
   if (match.stage === 'Quarter-final') return 'Quarter-finals'
   if (match.stage === 'Semi-final') return 'Semi-finals'
-  if (match.stage === 'Third place') return 'Third Place'
   return match.stage
 }
 
@@ -725,7 +721,7 @@ function App() {
     <main className="min-h-screen bg-[#f6f7f2] text-[#14201b]">
       <Header activeView={activeView} onViewSelect={handleViewSelect} />
 
-      {!isDetailRoute && (
+      {!isDetailRoute && activeView !== 'admin' && (
         <TournamentHeader
           allMatches={allMatches}
           liveMatch={liveMatch}
@@ -2439,35 +2435,30 @@ function TablesBoard({ selectedGroup, setSelectedGroup, standings }) {
       <QualificationRules />
       <section className="overflow-hidden rounded-lg border border-[#dce1d7] bg-white shadow-sm">
         <PanelHeader icon={Table2} title={`Group ${selectedGroup}`} detail="Top two advance" />
-        <div className="grid gap-3 border-t border-[#e5e9e0] p-3 md:hidden">
-          {selectedRows.map((row) => (
-            <MobileStandingCard key={row.team.id} row={row} />
-          ))}
-        </div>
-      </section>
-      <section className="hidden overflow-hidden rounded-lg border border-[#dce1d7] bg-white shadow-sm md:block">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
-            <thead className="bg-[#eef3e9] text-xs uppercase text-[#65756b]">
+        <div className="overflow-x-auto border-t border-[#e5e9e0]">
+          <table className="w-full min-w-[560px] border-collapse text-xs sm:min-w-[680px] sm:text-sm">
+            <thead className="bg-[#f3f7f0] text-[10px] uppercase text-[#65756b] sm:text-xs">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">#</th>
-                <th className="px-4 py-3 text-left font-semibold">Team</th>
-                <th className="px-3 py-3 text-center font-semibold">P</th>
-                <th className="px-3 py-3 text-center font-semibold">W</th>
-                <th className="px-3 py-3 text-center font-semibold">D</th>
-                <th className="px-3 py-3 text-center font-semibold">L</th>
-                <th className="px-3 py-3 text-center font-semibold">GF</th>
-                <th className="px-3 py-3 text-center font-semibold">GA</th>
-                <th className="px-3 py-3 text-center font-semibold">GD</th>
-                <th className="px-4 py-3 text-center font-semibold">PTS</th>
+                <th className="w-10 px-2 py-2 text-center font-semibold sm:w-12">#</th>
+                <th className="min-w-36 px-2 py-2 text-left font-semibold sm:px-3">Team</th>
+                <th className="px-2 py-2 text-center font-semibold">P</th>
+                <th className="px-2 py-2 text-center font-semibold">W</th>
+                <th className="px-2 py-2 text-center font-semibold">D</th>
+                <th className="px-2 py-2 text-center font-semibold">L</th>
+                <th className="px-2 py-2 text-center font-semibold">GF:GA</th>
+                <th className="px-2 py-2 text-center font-semibold">GD</th>
+                <th className="px-2 py-2 text-center font-semibold sm:px-3">PTS</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e5e9e0]">
               {selectedRows.map((row) => (
-                <tr key={row.team.id} className={row.qualified ? 'bg-[#fbfdf9]' : ''}>
-                  <td className="px-4 py-4">
+                <tr
+                  key={row.team.id}
+                  className={row.qualified ? 'bg-[#f3fbf6]' : 'bg-white'}
+                >
+                  <td className="px-2 py-2 text-center">
                     <span
-                      className={`grid h-7 w-7 place-items-center rounded-md text-xs font-semibold ${
+                      className={`mx-auto grid h-7 w-7 place-items-center rounded-md text-xs font-semibold ${
                         row.qualified
                           ? 'bg-[#dff1e6] text-[#17633f]'
                           : 'bg-[#ecefe8] text-[#65756b]'
@@ -2476,12 +2467,12 @@ function TablesBoard({ selectedGroup, setSelectedGroup, standings }) {
                       {row.rank}
                     </span>
                   </td>
-                  <td className="px-4 py-4">
-                    <div className="flex min-w-0 items-center gap-3">
+                  <td className="px-2 py-2 sm:px-3">
+                    <div className="flex min-w-0 items-center gap-2">
                       <FlagMark team={row.team} small />
-                      <div>
-                        <p className="font-semibold text-[#14201b]">{row.team.country}</p>
-                        <p className="text-xs text-[#65756b]">{row.team.code}</p>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-[#14201b]">{row.team.country}</p>
+                        <p className="truncate text-[10px] text-[#65756b] sm:text-xs">{row.team.code}</p>
                       </div>
                     </div>
                   </td>
@@ -2489,12 +2480,11 @@ function TablesBoard({ selectedGroup, setSelectedGroup, standings }) {
                   <StatCell value={row.won} />
                   <StatCell value={row.drawn} />
                   <StatCell value={row.lost} />
-                  <StatCell value={row.goalsFor} />
-                  <StatCell value={row.goalsAgainst} />
+                  <StatCell value={`${row.goalsFor}:${row.goalsAgainst}`} />
                   <StatCell
                     value={`${row.goalDifference > 0 ? '+' : ''}${row.goalDifference}`}
                   />
-                  <td className="px-4 py-4 text-center text-base font-semibold text-[#14201b]">
+                  <td className="px-2 py-2 text-center text-sm font-bold text-[#14201b] sm:px-3">
                     {row.points}
                   </td>
                 </tr>
@@ -2534,58 +2524,8 @@ function QualificationRules() {
   )
 }
 
-function MobileStandingCard({ row }) {
-  const stats = [
-    ['P', row.played],
-    ['W', row.won],
-    ['D', row.drawn],
-    ['L', row.lost],
-    ['GF:GA', `${row.goalsFor}:${row.goalsAgainst}`],
-    ['GD', `${row.goalDifference > 0 ? '+' : ''}${row.goalDifference}`],
-  ]
-
-  return (
-    <article
-      className={`overflow-hidden rounded-lg border bg-white shadow-sm ${
-        row.qualified ? 'border-[#b8dcc7]' : 'border-[#dce1d7]'
-      }`}
-    >
-      <div className="grid min-h-16 grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3">
-        <span
-          className={`grid h-8 w-8 place-items-center rounded-md text-xs font-semibold ${
-            row.qualified
-              ? 'bg-[#dff1e6] text-[#17633f]'
-              : 'bg-[#ecefe8] text-[#65756b]'
-          }`}
-        >
-          {row.rank}
-        </span>
-        <div className="flex min-w-0 items-center gap-3">
-          <FlagMark team={row.team} small />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-[#14201b]">{row.team.country}</p>
-            <p className="truncate text-xs text-[#65756b]">{row.team.code}</p>
-          </div>
-        </div>
-        <div className="text-right">
-          <p className="text-xl font-semibold leading-none text-[#14201b]">{row.points}</p>
-          <p className="mt-1 text-xs font-semibold uppercase text-[#65756b]">pts</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-3 border-t border-[#e5e9e0] bg-[#fbfdf9]">
-        {stats.map(([label, value]) => (
-          <div key={label} className="border-r border-b border-[#e5e9e0] px-3 py-2 last:border-r-0">
-            <p className="text-[11px] font-semibold uppercase text-[#65756b]">{label}</p>
-            <p className="mt-1 text-sm font-semibold text-[#34433a]">{value}</p>
-          </div>
-        ))}
-      </div>
-    </article>
-  )
-}
-
 function StatCell({ value }) {
-  return <td className="px-3 py-4 text-center font-medium text-[#34433a]">{value}</td>
+  return <td className="px-2 py-2 text-center font-medium text-[#34433a]">{value}</td>
 }
 
 function LeadersBoard({ leaderboards, onPlayerSelect }) {
@@ -3690,61 +3630,71 @@ function AdminBoard({
     setNewMatchDraft(createNewMatchDraft(teams))
   }
 
+  const adminAccessCard = (
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <PanelHeader icon={LockKeyhole} title="Admin Access" detail="Control panel" />
+      <div className="grid min-w-0 gap-4 border-t border-[#e5e9e0] p-4">
+        {adminEmail ? (
+          <div className="grid gap-3">
+            <div className="rounded-md bg-[#eef3e9] px-3 py-3 text-sm text-[#34433a]">
+              Signed in as {adminEmail}
+              <span className="mt-1 block text-xs text-[#65756b]">
+                {adminUnlocked
+                  ? 'Admin access confirmed.'
+                  : 'This email is signed in but is not listed in admin_users.'}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-[#d4dace] bg-white px-4 text-sm font-semibold text-[#34433a]"
+              onClick={onSignOut}
+            >
+              <LockKeyhole className="h-4 w-4" />
+              Sign out
+            </button>
+          </div>
+        ) : (
+          <form className="grid min-w-0 gap-3" onSubmit={submitAdminLogin}>
+            <AdminTextInput
+              disabled={false}
+              label="Admin email"
+              onChange={setAdminEmailDraft}
+              placeholder="name@example.com"
+              type="email"
+              value={adminEmailDraft}
+            />
+            <button
+              type="submit"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#163428] px-4 text-sm font-semibold text-white"
+            >
+              <LockKeyhole className="h-4 w-4" />
+              Send login link
+            </button>
+          </form>
+        )}
+        {authNotice && (
+          <div className="rounded-md bg-[#f8faf5] px-3 py-3 text-sm text-[#34433a]">
+            {authNotice}
+          </div>
+        )}
+        {adminUnlocked && (
+          <div className="grid min-w-0 grid-cols-2 gap-3">
+            <AdminMetric label="Teams" value={teams.length} />
+            <AdminMetric label="Players" value={players.length} />
+          </div>
+        )}
+      </div>
+    </section>
+  )
+
+  if (!adminUnlocked) {
+    return <div className="grid min-w-0 gap-6">{adminAccessCard}</div>
+  }
+
   return (
     <div className="grid min-w-0 gap-6">
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-        <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
-          <PanelHeader icon={LockKeyhole} title="Admin Access" detail="Control panel" />
-          <div className="grid min-w-0 gap-4 border-t border-[#e5e9e0] p-4">
-            {adminEmail ? (
-              <div className="grid gap-3">
-                <div className="rounded-md bg-[#eef3e9] px-3 py-3 text-sm text-[#34433a]">
-                  Signed in as {adminEmail}
-                  <span className="mt-1 block text-xs text-[#65756b]">
-                    {adminUnlocked
-                      ? 'Admin access confirmed.'
-                      : 'This email is signed in but is not listed in admin_users.'}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-[#d4dace] bg-white px-4 text-sm font-semibold text-[#34433a]"
-                  onClick={onSignOut}
-                >
-                  <LockKeyhole className="h-4 w-4" />
-                  Sign out
-                </button>
-              </div>
-            ) : (
-              <form className="grid min-w-0 gap-3" onSubmit={submitAdminLogin}>
-                <AdminTextInput
-                  disabled={false}
-                  label="Admin email"
-                  onChange={setAdminEmailDraft}
-                  placeholder="name@example.com"
-                  type="email"
-                  value={adminEmailDraft}
-                />
-                <button
-                  type="submit"
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#163428] px-4 text-sm font-semibold text-white"
-                >
-                  <LockKeyhole className="h-4 w-4" />
-                  Send login link
-                </button>
-              </form>
-            )}
-            {authNotice && (
-              <div className="rounded-md bg-[#f8faf5] px-3 py-3 text-sm text-[#34433a]">
-                {authNotice}
-              </div>
-            )}
-            <div className="grid min-w-0 grid-cols-2 gap-3">
-              <AdminMetric label="Teams" value={teams.length} />
-              <AdminMetric label="Players" value={players.length} />
-            </div>
-          </div>
-        </section>
+        {adminAccessCard}
 
         <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
           <PanelHeader icon={PencilLine} title="Edit Match" detail="Score and details" />

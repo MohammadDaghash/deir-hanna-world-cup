@@ -215,7 +215,6 @@ export const knockoutMatches = [
   { id: 'qf-4', stage: 'Quarter-final', date: '2026-06-22', time: '21:00', venue: 'Municipal Field', homeLabel: 'Winner Group D', awayLabel: 'Runner-up Group C', status: 'scheduled' },
   { id: 'sf-1', stage: 'Semi-final', date: '2026-06-25', time: '20:15', venue: 'Deir Hanna Stadium', homeLabel: 'Winner QF1', awayLabel: 'Winner QF2', status: 'scheduled' },
   { id: 'sf-2', stage: 'Semi-final', date: '2026-06-26', time: '20:15', venue: 'Deir Hanna Stadium', homeLabel: 'Winner QF3', awayLabel: 'Winner QF4', status: 'scheduled' },
-  { id: 'third', stage: 'Third place', date: '2026-06-29', time: '19:30', venue: 'Municipal Field', homeLabel: 'Loser SF1', awayLabel: 'Loser SF2', status: 'scheduled' },
   { id: 'final', stage: 'Final', date: '2026-06-29', time: '21:00', venue: 'Deir Hanna Stadium', homeLabel: 'Winner SF1', awayLabel: 'Winner SF2', status: 'scheduled' },
 ]
 

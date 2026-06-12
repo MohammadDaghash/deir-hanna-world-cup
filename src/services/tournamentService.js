@@ -148,7 +148,9 @@ export async function loadTournamentData() {
     events[eventRow.match_id].push(toEvent(eventRow))
     return events
   }, {})
-  const allMatches = matchesResponse.data.map((row) => toMatch(row, eventsByMatch))
+  const allMatches = matchesResponse.data
+    .map((row) => toMatch(row, eventsByMatch))
+    .filter((match) => match.stage !== 'Third place')
   const lineupsById = Object.fromEntries(lineupsResponse.data.map((lineup) => [lineup.id, lineup]))
   const appLineups = lineupsResponse.data.reduce((lineups, lineup) => {
     if (!lineups[lineup.match_id]) {
