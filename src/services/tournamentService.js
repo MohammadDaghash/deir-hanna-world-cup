@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase, supabaseConfigError } from '../lib/supabase'
+import { isDrawAllowedStage, isLeagueStage } from '../config/tournamentFormat.js'
 
 const viewerStorageKey = 'deir-hanna-world-cup-viewer-id'
 
@@ -148,9 +149,7 @@ export async function loadTournamentData() {
     events[eventRow.match_id].push(toEvent(eventRow))
     return events
   }, {})
-  const allMatches = matchesResponse.data
-    .map((row) => toMatch(row, eventsByMatch))
-    .filter((match) => match.stage !== 'Third place')
+  const allMatches = matchesResponse.data.map((row) => toMatch(row, eventsByMatch))
   const lineupsById = Object.fromEntries(lineupsResponse.data.map((lineup) => [lineup.id, lineup]))
   const appLineups = lineupsResponse.data.reduce((lineups, lineup) => {
     if (!lineups[lineup.match_id]) {
@@ -180,8 +179,8 @@ export async function loadTournamentData() {
   return {
     teams: teamsResponse.data.map(toTeam),
     players: playersResponse.data.map(toPlayer),
-    matches: allMatches.filter((match) => match.stage === 'Group'),
-    knockoutMatches: allMatches.filter((match) => match.stage !== 'Group'),
+    matches: allMatches.filter((match) => isLeagueStage(match.stage)),
+    knockoutMatches: allMatches.filter((match) => !isLeagueStage(match.stage)),
     lineups: appLineups,
   }
 }
@@ -276,7 +275,7 @@ export async function saveMatch(match) {
   const { error } = await client.from('matches').upsert({
     id: match.id,
     stage: match.stage,
-    group_code: match.stage === 'Group' ? match.group : null,
+    group_code: isLeagueStage(match.stage) ? match.group : null,
     matchday: match.matchday ?? null,
     date: match.date,
     time: match.time,
@@ -376,7 +375,7 @@ export async function deleteLineups(matchId) {
 
 export async function saveVote(match, choice) {
   const client = requireSupabase()
-  const choices = match.stage === 'Group' ? ['home', 'draw', 'away'] : ['home', 'away']
+  const choices = isDrawAllowedStage(match.stage) ? ['home', 'draw', 'away'] : ['home', 'away']
 
   if (!choices.includes(choice)) {
     throw new Error('This vote choice is not valid for this match.')

@@ -1,3 +1,5 @@
+import { tournamentFormat } from '../config/tournamentFormat.js'
+
 export function getTeam(teams, teamId) {
   return teams.find((team) => team.id === teamId)
 }
@@ -25,12 +27,8 @@ export function isScoredMatch(match) {
 }
 
 export function calculateStandings(teams, matches) {
-  const standings = teams.reduce((groups, team) => {
-    if (!groups[team.group]) {
-      groups[team.group] = []
-    }
-
-    groups[team.group].push({
+  const standings = {
+    [tournamentFormat.tableKey]: teams.map((team) => ({
       team,
       played: 0,
       won: 0,
@@ -40,13 +38,10 @@ export function calculateStandings(teams, matches) {
       goalsAgainst: 0,
       goalDifference: 0,
       points: 0,
-    })
+    })),
+  }
 
-    return groups
-  }, {})
-
-  const rowsByTeam = Object.values(standings)
-    .flat()
+  const rowsByTeam = standings[tournamentFormat.tableKey]
     .reduce((rows, row) => {
       rows[row.team.id] = row
       return rows
@@ -83,23 +78,23 @@ export function calculateStandings(teams, matches) {
     }
   })
 
-  Object.values(standings).forEach((groupRows) => {
-    groupRows.forEach((row) => {
-      row.goalDifference = row.goalsFor - row.goalsAgainst
-    })
+  const tableRows = standings[tournamentFormat.tableKey]
 
-    groupRows.sort(
-      (a, b) =>
-        b.points - a.points ||
-        b.goalDifference - a.goalDifference ||
-        b.goalsFor - a.goalsFor ||
-        a.team.country.localeCompare(b.team.country),
-    )
+  tableRows.forEach((row) => {
+    row.goalDifference = row.goalsFor - row.goalsAgainst
+  })
 
-    groupRows.forEach((row, index) => {
-      row.rank = index + 1
-      row.qualified = index < 2
-    })
+  tableRows.sort(
+    (a, b) =>
+      b.points - a.points ||
+      b.goalDifference - a.goalDifference ||
+      b.goalsFor - a.goalsFor ||
+      a.team.country.localeCompare(b.team.country),
+  )
+
+  tableRows.forEach((row, index) => {
+    row.rank = index + 1
+    row.qualified = index < tournamentFormat.qualifyingTeams
   })
 
   return standings

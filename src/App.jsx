@@ -62,6 +62,15 @@ import {
   isScoredMatch,
   resolveLineup,
 } from './utils/tournament'
+import {
+  isDrawAllowedStage,
+  isLeagueStage,
+  knockoutStageFilters,
+  roundFilterOptions,
+  stageLabels,
+  stageOptions,
+  tournamentFormat,
+} from './config/tournamentFormat'
 
 const navItems = [
   { id: 'overview', label: 'Overview', icon: Activity },
@@ -73,16 +82,9 @@ const navItems = [
   { id: 'admin', label: 'Admin', icon: Settings },
 ]
 
-const groups = ['A', 'B', 'C', 'D']
 const statIcons = [Users, ClipboardList, Goal, Timer]
 const maxSquadPlayers = 10
 const starterCount = 7
-const stageOptions = [
-  { label: 'Group', value: 'Group' },
-  { label: 'Quarter-final', value: 'Quarter-final' },
-  { label: 'Semi-final', value: 'Semi-final' },
-  { label: 'Final', value: 'Final' },
-]
 const statusOptions = [
   { label: 'Scheduled', value: 'scheduled' },
   { label: 'Live', value: 'live' },
@@ -104,22 +106,8 @@ const emptyTournamentData = {
 }
 const matchFilterModes = [
   { id: 'date', label: 'By date' },
-  { id: 'group', label: 'By group' },
   { id: 'round', label: 'By round' },
   { id: 'team', label: 'By team' },
-]
-const roundFilterOptions = [
-  { id: 'group-1', label: 'Group Stage Round 1' },
-  { id: 'group-2', label: 'Group Stage Round 2' },
-  { id: 'group-3', label: 'Group Stage Round 3' },
-  { id: 'Quarter-final', label: 'Quarter-finals' },
-  { id: 'Semi-final', label: 'Semi-finals' },
-  { id: 'Final', label: 'Final' },
-]
-const knockoutStageFilters = [
-  { id: 'Quarter-final', label: 'Quarter-finals' },
-  { id: 'Semi-final', label: 'Semi-finals' },
-  { id: 'Final', label: 'Final' },
 ]
 const detailTabs = ['Details', 'Lineups', 'Standings', 'Matches']
 const teamPageTabs = ['Matches', 'Standings', 'Players', 'Statistics']
@@ -215,35 +203,33 @@ function formatTournamentYear(matches) {
 
 function getCurrentStage(matches) {
   const live = matches.find((match) => match.status === 'live')
-  if (live) return live.stage === 'Group' ? 'Group stage' : live.stage
+  if (live) return isLeagueStage(live.stage) ? 'League stage' : getMatchRoundLabel(live)
 
   const upcoming = getUpcomingMatches(matches)[0]
-  if (upcoming) return upcoming.stage === 'Group' ? 'Group stage' : upcoming.stage
+  if (upcoming) return isLeagueStage(upcoming.stage) ? 'League stage' : getMatchRoundLabel(upcoming)
 
   return 'Completed'
 }
 
 function getMatchRoundLabel(match) {
-  if (match.stage === 'Group') {
+  if (isLeagueStage(match.stage)) {
     return `Round ${match.matchday ?? 1}`
   }
 
-  if (match.stage === 'Quarter-final') return 'Quarter-finals'
-  if (match.stage === 'Semi-final') return 'Semi-finals'
-  return match.stage
+  return stageLabels[match.stage] ?? match.stage
 }
 
 function getMatchCompetitionLabel(match) {
-  if (match.stage === 'Group') {
-    return `Deir Hanna World Cup, Group ${match.group}`
+  if (isLeagueStage(match.stage)) {
+    return `Deir Hanna World Cup, ${tournamentFormat.tableLabel}`
   }
 
   return `Deir Hanna World Cup, ${getMatchRoundLabel(match)}`
 }
 
 function matchBelongsToRound(match, roundId) {
-  if (roundId.startsWith('group-')) {
-    return match.stage === 'Group' && Number(match.matchday ?? 1) === Number(roundId.replace('group-', ''))
+  if (roundId.startsWith('league-')) {
+    return isLeagueStage(match.stage) && Number(match.matchday ?? 1) === Number(roundId.replace('league-', ''))
   }
 
   return match.stage === roundId
@@ -360,7 +346,6 @@ function App() {
   const [tournamentVotes, setTournamentVotes] = useState({})
   const [route, setRoute] = useState(() => parseHashRoute())
   const [activeView, setActiveView] = useState('overview')
-  const [selectedGroup, setSelectedGroup] = useState('A')
   const [session, setSession] = useState(null)
   const [adminUnlocked, setAdminUnlocked] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -539,7 +524,7 @@ function App() {
         id,
         country: teamDraft.country.trim(),
         code: teamDraft.code.trim().toUpperCase(),
-        group: teamDraft.group,
+        group: tournamentFormat.tableKey,
         color: teamDraft.color,
         secondary: teamDraft.secondary,
       })
@@ -601,7 +586,7 @@ function App() {
   function normalizeMatchDraft(matchDraft) {
     return {
       ...matchDraft,
-      group: matchDraft.stage === 'Group' ? matchDraft.group : undefined,
+      group: isLeagueStage(matchDraft.stage) ? tournamentFormat.tableKey : undefined,
       matchday: Number(matchDraft.matchday),
       homeTeamId: matchDraft.homeTeamId || undefined,
       awayTeamId: matchDraft.awayTeamId || undefined,
@@ -812,11 +797,7 @@ function App() {
           />
         )}
         {!isDetailRoute && activeView === 'tables' && (
-          <TablesBoard
-            selectedGroup={selectedGroup}
-            setSelectedGroup={setSelectedGroup}
-            standings={standings}
-          />
+          <TablesBoard standings={standings} />
         )}
         {!isDetailRoute && activeView === 'knockout' && (
           <KnockoutBoard matches={knockoutMatches} onMatchSelect={openMatch} teams={teams} />
@@ -910,9 +891,9 @@ function TournamentHeader({ allMatches, liveMatch, stats, teams }) {
             </div>
             <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-[#cfe7d8]">
               <span>{teams.length} teams</span>
-              <span>{groups.length} groups</span>
+              <span>1 league table</span>
               <span>{matchCount} matches</span>
-              <span>Top 2 advance</span>
+              <span>Top {tournamentFormat.qualifyingTeams} advance</span>
             </div>
           </div>
         </div>
@@ -1116,11 +1097,9 @@ function ViewerFocus({
         </div>
       </div>
       <div className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
-        <PanelHeader icon={Trophy} title="Qualification Race" detail="Current top two" />
+        <PanelHeader icon={Trophy} title="Qualification Race" detail={`Top ${tournamentFormat.qualifyingTeams}`} />
         <div className="grid gap-2 border-t border-[#e5e9e0] p-4">
-          {groups.map((group) => (
-            <QualificationRow key={group} group={group} rows={standings[group] ?? []} />
-          ))}
+          <QualificationRow rows={standings[tournamentFormat.tableKey] ?? []} />
         </div>
       </div>
       <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm lg:col-span-2">
@@ -1209,7 +1188,7 @@ function TournamentPredictionsPanel({ leaderboards, onVote, teams, tournamentVot
         <TournamentVoteCard
           candidates={teams}
           getLabel={(team) => team.country}
-          getMeta={(team) => `Group ${team.group}`}
+          getMeta={() => tournamentFormat.tableLabel}
           getVisual={(team) => <FlagMark team={team} small />}
           onVote={onVote}
           title="Tournament winner"
@@ -1336,23 +1315,23 @@ function InsightsPanel({ allMatches, leaderboards, teams }) {
           value={leaderboards.goals[0] ? `${leaderboards.goals[0].name} (${leaderboards.goals[0].goals})` : 'None'}
         />
         <AdminMetric label="Teams" value={teams.length} />
-        <AdminMetric label="Groups" value={groups.length} />
+        <AdminMetric label="Table" value={tournamentFormat.tableLabel} />
         <AdminMetric
           label="Goals"
           value={scoredMatches.reduce((total, match) => total + match.homeScore + match.awayScore, 0)}
         />
-        <AdminMetric label="Format" value="Top 2 qualify" />
+        <AdminMetric label="Format" value={`Top ${tournamentFormat.qualifyingTeams} qualify`} />
       </div>
     </section>
   )
 }
 
-function QualificationRow({ group, rows }) {
-  const leaders = rows.slice(0, 2)
+function QualificationRow({ rows }) {
+  const leaders = rows.slice(0, tournamentFormat.qualifyingTeams)
 
   return (
-    <div className="grid min-h-12 grid-cols-[64px_minmax(0,1fr)] items-center gap-3 rounded-lg bg-[#f8faf5] px-3">
-      <span className="text-xs font-semibold uppercase text-[#65756b]">Group {group}</span>
+    <div className="grid min-h-12 grid-cols-[72px_minmax(0,1fr)] items-center gap-3 rounded-lg bg-[#f8faf5] px-3">
+      <span className="text-xs font-semibold uppercase text-[#65756b]">Top 4</span>
       <div className="flex min-w-0 flex-wrap gap-2">
         {leaders.map((row) => (
           <span
@@ -1370,30 +1349,15 @@ function QualificationRow({ group, rows }) {
 }
 
 function TeamsBoard({ onTeamSelect, playersByTeam, teams }) {
-  const [groupFilter, setGroupFilter] = useState('All')
-  const filters = ['All', ...groups]
-  const visibleTeams = teams.filter((team) => groupFilter === 'All' || team.group === groupFilter)
-
   return (
     <div className="grid min-w-0 gap-4">
       <Toolbar title="Teams & Squads" icon={Users}>
-        {filters.map((item) => (
-          <button
-            key={item}
-            type="button"
-            className={`rounded-md border px-3 py-2 text-sm font-medium ${
-              groupFilter === item
-                ? 'border-[#163428] bg-[#163428] text-white'
-                : 'border-[#d4dace] bg-white text-[#34433a]'
-            }`}
-            onClick={() => setGroupFilter(item)}
-          >
-            {item === 'All' ? 'All' : `Group ${item}`}
-          </button>
-        ))}
+        <span className="rounded-md bg-white px-3 py-2 text-xs font-semibold text-[#65756b]">
+          {teams.length} teams
+        </span>
       </Toolbar>
       <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {visibleTeams.map((team) => (
+        {teams.map((team) => (
           <TeamCard
             key={team.id}
             players={playersByTeam[team.id] ?? []}
@@ -1420,7 +1384,7 @@ function TeamCard({ onClick, team, players }) {
           <div className="min-w-0">
             <h2 className="truncate text-base font-semibold text-[#14201b]">{team.country}</h2>
             <p className="truncate text-xs text-[#65756b]">
-              Group {team.group} / {players.length} players
+              {tournamentFormat.tableLabel} / {players.length} players
             </p>
           </div>
         </div>
@@ -1603,27 +1567,25 @@ function StatusPill({ status }) {
 }
 
 function GroupSnapshot({ onTeamSelect, standings }) {
+  const tableRows = standings[tournamentFormat.tableKey] ?? []
+
   return (
     <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
-      <PanelHeader icon={Table2} title="Group Tables" detail="Top two advance" />
-      <div className="grid min-w-0 border-t border-[#e5e9e0] md:grid-cols-2">
-        {groups.map((group) => (
-          <div key={group} className="min-w-0 border-b border-[#e5e9e0] p-4 md:border-r">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">Group {group}</h2>
-              <span className="text-xs font-semibold text-[#65756b]">P / GD / PTS</span>
-            </div>
-            <div className="grid gap-2">
-              {standings[group].map((row) => (
-                <CompactStandingRow
-                  key={row.team.id}
-                  onTeamSelect={onTeamSelect}
-                  row={row}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+      <PanelHeader icon={Table2} title="League Table" detail={`Top ${tournamentFormat.qualifyingTeams} advance`} />
+      <div className="border-t border-[#e5e9e0] p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-semibold">{tournamentFormat.tableLabel}</h2>
+          <span className="text-xs font-semibold text-[#65756b]">P / GD / PTS</span>
+        </div>
+        <div className="grid gap-2">
+          {tableRows.slice(0, tournamentFormat.qualifyingTeams).map((row) => (
+            <CompactStandingRow
+              key={row.team.id}
+              onTeamSelect={onTeamSelect}
+              row={row}
+            />
+          ))}
+        </div>
       </div>
     </section>
   )
@@ -1739,20 +1701,12 @@ function MatchTimeline({ match, teams }) {
 
 function MatchesBoard({ matches, onMatchSelect, onVote, teams, votes }) {
   const [mode, setMode] = useState('date')
-  const [selectedGroup, setSelectedGroup] = useState('A')
-  const [selectedRound, setSelectedRound] = useState('group-1')
+  const [selectedRound, setSelectedRound] = useState('league-1')
   const [selectedTeamId, setSelectedTeamId] = useState(teams[0]?.id ?? '')
   const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0]
   const sortedMatches = useMemo(() => [...matches].sort(compareMatchDate), [matches])
 
   const sections = useMemo(() => {
-    if (mode === 'group') {
-      return groupMatches(
-        sortedMatches.filter((match) => match.stage === 'Group' && match.group === selectedGroup),
-        getMatchRoundLabel,
-      )
-    }
-
     if (mode === 'round') {
       return groupMatches(
         sortedMatches.filter((match) => matchBelongsToRound(match, selectedRound)),
@@ -1771,7 +1725,7 @@ function MatchesBoard({ matches, onMatchSelect, onVote, teams, votes }) {
     }
 
     return groupMatches(sortedMatches, (match) => formatLongDate(match.date))
-  }, [mode, selectedGroup, selectedRound, selectedTeam, sortedMatches])
+  }, [mode, selectedRound, selectedTeam, sortedMatches])
 
   return (
     <div className="grid min-w-0 gap-4">
@@ -1792,14 +1746,6 @@ function MatchesBoard({ matches, onMatchSelect, onVote, teams, votes }) {
           ))}
         </div>
         <div className="grid gap-3 border-b border-white/10 px-3 py-3">
-          {mode === 'group' && (
-            <FilterSelect
-              label="Select group"
-              onChange={setSelectedGroup}
-              options={groups.map((group) => ({ label: `Group ${group}`, value: group }))}
-              value={selectedGroup}
-            />
-          )}
           {mode === 'round' && (
             <FilterSelect
               label="Select round"
@@ -2066,7 +2012,7 @@ function MatchRow({
 
 function getVoteBreakdown(votes, match) {
   const matchVotes = votes?.[match.id] ?? { home: 0, draw: 0, away: 0, userChoice: null }
-  const hasDraw = match.stage === 'Group'
+  const hasDraw = isDrawAllowedStage(match.stage)
   const homeVotes = matchVotes.home ?? 0
   const drawVotes = hasDraw ? matchVotes.draw ?? 0 : 0
   const awayVotes = matchVotes.away ?? 0
@@ -2120,7 +2066,7 @@ function PredictionVote({ compact = false, match, onVote, teams, votes }) {
         <div>
           <h3 className="text-sm font-semibold text-[#14201b]">Who will win?</h3>
           {breakdown.hasDraw && (
-            <p className="text-xs font-medium text-[#34433a]">Draw is available for group games</p>
+            <p className="text-xs font-medium text-[#34433a]">Draw is available for league games</p>
           )}
           <p className="text-xs text-[#65756b]">
             {breakdown.totalVotes
@@ -2410,31 +2356,19 @@ function ScoreCell({ match }) {
   )
 }
 
-function TablesBoard({ selectedGroup, setSelectedGroup, standings }) {
-  const selectedRows = standings[selectedGroup] ?? []
+function TablesBoard({ standings }) {
+  const selectedRows = standings[tournamentFormat.tableKey] ?? []
 
   return (
     <div className="grid min-w-0 gap-4">
-      <Toolbar title="Group Tables" icon={Table2}>
-        {groups.map((group) => (
-          <button
-            key={group}
-            type="button"
-            className={`grid h-10 w-10 place-items-center rounded-md border text-sm font-semibold ${
-              selectedGroup === group
-                ? 'border-[#163428] bg-[#163428] text-white'
-                : 'border-[#d4dace] bg-white text-[#34433a]'
-            }`}
-            onClick={() => setSelectedGroup(group)}
-            aria-label={`Show group ${group}`}
-          >
-            {group}
-          </button>
-        ))}
+      <Toolbar title="League Table" icon={Table2}>
+        <span className="rounded-md bg-white px-3 py-2 text-xs font-semibold text-[#65756b]">
+          Top {tournamentFormat.qualifyingTeams} qualify
+        </span>
       </Toolbar>
       <QualificationRules />
       <section className="overflow-hidden rounded-lg border border-[#dce1d7] bg-white shadow-sm">
-        <PanelHeader icon={Table2} title={`Group ${selectedGroup}`} detail="Top two advance" />
+        <PanelHeader icon={Table2} title={tournamentFormat.tableLabel} detail={`Top ${tournamentFormat.qualifyingTeams} advance`} />
         <div className="overflow-x-auto border-t border-[#e5e9e0]">
           <table className="w-full min-w-[560px] border-collapse text-xs sm:min-w-[680px] sm:text-sm">
             <thead className="bg-[#f3f7f0] text-[10px] uppercase text-[#65756b] sm:text-xs">
@@ -2509,13 +2443,13 @@ function QualificationRules() {
       >
         <span>
           <span className="block text-sm font-semibold text-[#14201b]">Qualification Rules</span>
-          <span className="block text-xs text-[#65756b]">Top 2 advance from each group</span>
+          <span className="block text-xs text-[#65756b]">Top {tournamentFormat.qualifyingTeams} advance from the league table</span>
         </span>
         <ChevronDown className={`h-5 w-5 text-[#65756b] transition ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="grid gap-2 border-t border-[#e5e9e0] px-4 py-3 text-sm text-[#34433a]">
-          <p>1. Top 2 teams from each group qualify for the knockout stage.</p>
+          <p>1. Top {tournamentFormat.qualifyingTeams} teams from the league table qualify for the knockout stage.</p>
           <p>2. Tiebreakers: points, goal difference, goals scored, then head-to-head if available.</p>
           <p>3. If teams are still tied, fair play ranking and organizer decision can be used.</p>
         </div>
@@ -2604,63 +2538,43 @@ function PlayerStatRow({ onPlayerSelect, player, index, value, label }) {
 }
 
 function KnockoutPanel({ matches, teams }) {
-  const quarterFinals = matches.filter((match) => match.stage === 'Quarter-final')
-  const semiFinals = matches.filter((match) => match.stage === 'Semi-final')
-  const finalMatch = matches.find((match) => match.stage === 'Final')
-  const leftQuarters = quarterFinals.slice(0, 2)
-  const rightQuarters = quarterFinals.slice(2, 4)
-  const leftTeams = leftQuarters.flatMap((match) => [
-    getNeutralTeamLabel(match, teams, 'home'),
-    getNeutralTeamLabel(match, teams, 'away'),
-  ])
-  const rightTeams = rightQuarters.flatMap((match) => [
-    getNeutralTeamLabel(match, teams, 'home'),
-    getNeutralTeamLabel(match, teams, 'away'),
-  ])
+  const semiFinals = matches.filter((match) => match.stage === tournamentFormat.stages.semiFinal)
+  const thirdPlaceMatch = matches.find((match) => match.stage === tournamentFormat.stages.thirdPlace)
+  const finalMatch = matches.find((match) => match.stage === tournamentFormat.stages.final)
 
   return (
     <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
       <PanelHeader icon={Trophy} title="Knockout Path" detail="Single-game bracket" />
       <div className="hidden min-w-0 overflow-x-auto border-t border-[#e5e9e0] p-4 lg:block">
-        <div className="knockout-path">
-          <TeamPathColumn labels={leftTeams} side="left" />
-          <BracketRound
-            matches={leftQuarters}
-            pathOnly
-            side="left"
-            teams={teams}
-            title="Quarter-finals"
-          />
-          <BracketRound
-            center
-            matches={semiFinals.slice(0, 1)}
-            side="left"
-            teams={teams}
-            title="Semi-final"
-          />
-          <FinalNode match={finalMatch} teams={teams} />
-          <BracketRound
-            center
-            matches={semiFinals.slice(1, 2)}
-            side="right"
-            teams={teams}
-            title="Semi-final"
-          />
-          <BracketRound
-            matches={rightQuarters}
-            pathOnly
-            side="right"
-            teams={teams}
-            title="Quarter-finals"
-          />
-          <TeamPathColumn labels={rightTeams} side="right" />
+        <div className="grid min-w-[760px] gap-6">
+          <div className="grid grid-cols-[minmax(0,1fr)_260px_minmax(0,1fr)] items-center gap-6">
+            <BracketRound
+              matches={semiFinals.slice(0, 1)}
+              side="left"
+              teams={teams}
+              title="1st vs 4th"
+            />
+            <FinalNode match={finalMatch} teams={teams} />
+            <BracketRound
+              matches={semiFinals.slice(1, 2)}
+              side="right"
+              teams={teams}
+              title="2nd vs 3rd"
+            />
+          </div>
+          {thirdPlaceMatch && (
+            <div className="mx-auto w-full max-w-sm">
+              <p className="mb-3 text-center text-xs font-semibold uppercase text-[#65756b]">Third Place</p>
+              <BracketMatchNode match={thirdPlaceMatch} teams={teams} />
+            </div>
+          )}
         </div>
       </div>
       <MobileKnockoutPath
         finalMatch={finalMatch}
-        quarterFinals={quarterFinals}
         semiFinals={semiFinals}
         teams={teams}
+        thirdPlaceMatch={thirdPlaceMatch}
       />
     </section>
   )
@@ -2671,17 +2585,17 @@ function getNeutralTeamLabel(match, teams, side) {
   return team?.country ?? 'TBD'
 }
 
-function MobileKnockoutPath({ finalMatch, quarterFinals, semiFinals, teams }) {
+function MobileKnockoutPath({ finalMatch, semiFinals, teams, thirdPlaceMatch }) {
   const stages = [
     {
-      title: 'Quarter-finals',
-      detail: 'Eight teams enter',
-      matches: quarterFinals,
+      title: 'Semi-finals',
+      detail: '1st vs 4th / 2nd vs 3rd',
+      matches: semiFinals,
     },
     {
-      title: 'Semi-finals',
-      detail: 'Quarter-final winners',
-      matches: semiFinals,
+      title: 'Third Place',
+      detail: 'Semi-final losers',
+      matches: thirdPlaceMatch ? [thirdPlaceMatch] : [],
     },
     {
       title: 'Final',
@@ -2695,7 +2609,7 @@ function MobileKnockoutPath({ finalMatch, quarterFinals, semiFinals, teams }) {
     <div className="grid gap-4 border-t border-[#e5e9e0] p-3 lg:hidden">
       {stages.map((stage, index) => (
         <div key={stage.title} className="grid gap-3">
-          {index > 0 && <MobileAdvanceConnector label="Winners advance" />}
+          {index > 0 && <MobileAdvanceConnector label={stage.title === 'Third Place' ? 'Losers play' : 'Winners advance'} />}
           <MobileBracketStage
             detail={stage.detail}
             finalStage={stage.finalStage}
@@ -2786,16 +2700,6 @@ function MobileBracketTeam({ team }) {
       <span className="truncate text-sm font-semibold text-[#34433a]">
         {displayTeam.country}
       </span>
-    </div>
-  )
-}
-
-function TeamPathColumn({ labels, side }) {
-  return (
-    <div className={`team-path-column ${side}`}>
-      {labels.map((label, index) => (
-        <PlaceholderTeam key={`${label}-${index}`} label={label} />
-      ))}
     </div>
   )
 }
@@ -3044,14 +2948,14 @@ function MatchCompetitionCard({ match }) {
 }
 
 function StandingsPreview({ large = false, match, onTeamSelect, standings }) {
-  const rows = match.group ? standings[match.group] ?? [] : []
+  const rows = isLeagueStage(match.stage) ? standings[tournamentFormat.tableKey] ?? [] : []
 
   return (
     <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
       <PanelHeader
         icon={Table2}
-        title={large ? 'Group Standings' : 'Standings Preview'}
-        detail={match.group ? `Group ${match.group}` : 'Knockout match'}
+        title={large ? 'League Standings' : 'Standings Preview'}
+        detail={isLeagueStage(match.stage) ? tournamentFormat.tableLabel : 'Knockout match'}
       />
       <div className="border-t border-[#e5e9e0] p-3">
         {rows.length ? (
@@ -3065,7 +2969,7 @@ function StandingsPreview({ large = false, match, onTeamSelect, standings }) {
             ))}
           </div>
         ) : (
-          <EmptyState text="Standings are available for group matches." />
+          <EmptyState text="Standings are available for league matches." />
         )}
       </div>
     </section>
@@ -3160,7 +3064,7 @@ function TeamPage({ allMatches, onBack, onMatchSelect, onPlayerSelect, players, 
             <FlagMark team={team} />
             <div className="min-w-0">
               <h1 className="truncate text-2xl font-semibold">{team.country}</h1>
-              <p className="mt-1 text-sm text-[#cfe7d8]">Group {team.group} / {players.length} players</p>
+              <p className="mt-1 text-sm text-[#cfe7d8]">{tournamentFormat.tableLabel} / {players.length} players</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -3187,9 +3091,9 @@ function TeamPage({ allMatches, onBack, onMatchSelect, onPlayerSelect, players, 
       )}
       {activeTab === 'Standings' && (
         <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
-          <PanelHeader icon={Table2} title="Standings" detail={`Group ${team.group}`} />
+          <PanelHeader icon={Table2} title="Standings" detail={tournamentFormat.tableLabel} />
           <div className="grid gap-2 border-t border-[#e5e9e0] p-3">
-            {(standings[team.group] ?? []).map((row) => (
+            {(standings[tournamentFormat.tableKey] ?? []).map((row) => (
               <CompactStandingRow key={row.team.id} row={row} />
             ))}
           </div>
@@ -3407,7 +3311,7 @@ function PlayerMiniChart({ rows }) {
 }
 
 function KnockoutBoard({ matches, onMatchSelect, teams }) {
-  const [activeStage, setActiveStage] = useState('Quarter-final')
+  const [activeStage, setActiveStage] = useState(tournamentFormat.stages.semiFinal)
   const [expanded, setExpanded] = useState(false)
   const stageMatches = matches
     .filter((match) => match.stage === activeStage)
@@ -3492,8 +3396,8 @@ function KnockoutBoard({ matches, onMatchSelect, teams }) {
 
 function createNewMatchDraft(teams) {
   return {
-    stage: 'Group',
-    group: 'A',
+    stage: tournamentFormat.stages.league,
+    group: tournamentFormat.tableKey,
     matchday: 1,
     date: '2026-06-20',
     time: '19:30',
@@ -3521,7 +3425,7 @@ function matchToAdminDraft(match) {
       player: event.player ?? '',
       assist: event.assist ?? '',
     })),
-    group: match.group ?? 'A',
+    group: match.group ?? tournamentFormat.tableKey,
     matchday: match.matchday ?? 1,
     homeTeamId: match.homeTeamId ?? '',
     awayTeamId: match.awayTeamId ?? '',
@@ -3549,7 +3453,7 @@ function AdminBoard({
   const [teamDraft, setTeamDraft] = useState({
     country: '',
     code: '',
-    group: 'A',
+    group: tournamentFormat.tableKey,
     color: '#1f6d4d',
     secondary: '#eef3e9',
   })
@@ -3731,13 +3635,7 @@ function AdminBoard({
                 placeholder="ARG"
                 value={teamDraft.code}
               />
-              <AdminSelect
-                disabled={disabled}
-                label="Group"
-                onChange={(value) => setTeamDraft((draft) => ({ ...draft, group: value }))}
-                options={groups.map((group) => ({ label: group, value: group }))}
-                value={teamDraft.group}
-              />
+              <AdminTextInput disabled label="Table" value={tournamentFormat.tableLabel} />
             </FieldGrid>
             <FieldGrid>
               <AdminTextInput
@@ -3845,13 +3743,7 @@ function MatchDraftFields({ disabled, draft, setDraft, teamOptions }) {
           options={stageOptions}
           value={draft.stage}
         />
-        <AdminSelect
-          disabled={disabled || draft.stage !== 'Group'}
-          label="Group"
-          onChange={(value) => updateDraft('group', value)}
-          options={groups.map((group) => ({ label: group, value: group }))}
-          value={draft.group}
-        />
+        <AdminTextInput disabled label="Table" value={tournamentFormat.tableLabel} />
       </FieldGrid>
       <FieldGrid>
         <AdminTextInput
@@ -4132,8 +4024,9 @@ function AdminTextInput({
         disabled={disabled}
         maxLength={maxLength}
         min={min}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => onChange?.(event.target.value)}
         placeholder={placeholder}
+        readOnly={!onChange}
         type={type}
         value={value}
       />

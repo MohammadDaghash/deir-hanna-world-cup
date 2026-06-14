@@ -1,221 +1,99 @@
-export const groups = ['A', 'B', 'C', 'D']
+import { tournamentFormat } from '../config/tournamentFormat.js'
+
+export const groups = [tournamentFormat.tableKey]
+
+const leagueGroup = tournamentFormat.tableKey
 
 export const teams = [
-  { id: 'arg', country: 'Argentina', code: 'ARG', group: 'A', color: '#5dade2', secondary: '#ffffff' },
-  { id: 'jpn', country: 'Japan', code: 'JPN', group: 'A', color: '#bc002d', secondary: '#ffffff' },
-  { id: 'mar', country: 'Morocco', code: 'MAR', group: 'A', color: '#c1272d', secondary: '#006233' },
-  { id: 'bra', country: 'Brazil', code: 'BRA', group: 'B', color: '#f7d117', secondary: '#009b3a' },
-  { id: 'ger', country: 'Germany', code: 'GER', group: 'B', color: '#111111', secondary: '#ffce00' },
-  { id: 'gha', country: 'Ghana', code: 'GHA', group: 'B', color: '#fcd116', secondary: '#ce1126' },
-  { id: 'fra', country: 'France', code: 'FRA', group: 'C', color: '#0055a4', secondary: '#ef4135' },
-  { id: 'por', country: 'Portugal', code: 'POR', group: 'C', color: '#006600', secondary: '#ff0000' },
-  { id: 'esp', country: 'Spain', code: 'ESP', group: 'C', color: '#c60b1e', secondary: '#ffc400' },
-  { id: 'eng', country: 'England', code: 'ENG', group: 'D', color: '#ffffff', secondary: '#cf142b' },
-  { id: 'ita', country: 'Italy', code: 'ITA', group: 'D', color: '#008c45', secondary: '#cd212a' },
-  { id: 'usa', country: 'United States', code: 'USA', group: 'D', color: '#3c3b6e', secondary: '#b22234' },
+  { id: 'arg', country: 'Argentina', code: 'ARG', group: leagueGroup, color: '#5dade2', secondary: '#ffffff' },
+  { id: 'jpn', country: 'Japan', code: 'JPN', group: leagueGroup, color: '#bc002d', secondary: '#ffffff' },
+  { id: 'mar', country: 'Morocco', code: 'MAR', group: leagueGroup, color: '#c1272d', secondary: '#006233' },
+  { id: 'bra', country: 'Brazil', code: 'BRA', group: leagueGroup, color: '#f7d117', secondary: '#009b3a' },
+  { id: 'ger', country: 'Germany', code: 'GER', group: leagueGroup, color: '#111111', secondary: '#ffce00' },
+  { id: 'gha', country: 'Ghana', code: 'GHA', group: leagueGroup, color: '#fcd116', secondary: '#ce1126' },
+  { id: 'fra', country: 'France', code: 'FRA', group: leagueGroup, color: '#0055a4', secondary: '#ef4135' },
+  { id: 'por', country: 'Portugal', code: 'POR', group: leagueGroup, color: '#006600', secondary: '#ff0000' },
 ]
 
-export const matches = [
-  {
-    id: 'g-a-1',
-    stage: 'Group',
-    group: 'A',
-    matchday: 1,
-    date: '2026-06-10',
-    time: '19:30',
-    venue: 'Deir Hanna Stadium',
-    homeTeamId: 'arg',
-    awayTeamId: 'jpn',
+const leagueFixtureRows = [
+  ['arg', 'por'], ['jpn', 'fra'], ['mar', 'gha'], ['bra', 'ger'],
+  ['arg', 'fra'], ['por', 'gha'], ['jpn', 'ger'], ['mar', 'bra'],
+  ['arg', 'gha'], ['fra', 'ger'], ['por', 'bra'], ['jpn', 'mar'],
+  ['arg', 'ger'], ['gha', 'bra'], ['fra', 'mar'], ['por', 'jpn'],
+  ['arg', 'bra'], ['ger', 'mar'], ['gha', 'jpn'], ['fra', 'por'],
+  ['arg', 'mar'], ['bra', 'jpn'], ['ger', 'por'], ['gha', 'fra'],
+  ['arg', 'jpn'], ['mar', 'por'], ['bra', 'fra'], ['ger', 'gha'],
+]
+
+const leagueMatchDetails = {
+  1: {
     homeScore: 2,
     awayScore: 1,
     status: 'final',
     events: [
       { minute: 14, type: 'goal', teamId: 'arg', player: 'Rami Saad', assist: 'Karim Haddad' },
-      { minute: 38, type: 'goal', teamId: 'jpn', player: 'Nader Saleh', assist: 'Yazan Abbas' },
+      { minute: 38, type: 'goal', teamId: 'por', player: 'Omar Kassis', assist: 'Jad Sabbagh' },
       { minute: 72, type: 'goal', teamId: 'arg', player: 'Karim Haddad', assist: 'Rami Saad' },
     ],
   },
-  {
-    id: 'g-a-2',
-    stage: 'Group',
-    group: 'A',
-    matchday: 2,
-    date: '2026-06-12',
-    time: '20:15',
-    venue: 'Municipal Field',
-    homeTeamId: 'mar',
-    awayTeamId: 'arg',
+  2: {
     homeScore: 1,
-    awayScore: 1,
-    status: 'live',
-    minute: 62,
+    awayScore: 2,
+    status: 'final',
     events: [
-      { minute: 21, type: 'goal', teamId: 'mar', player: 'Elias Khoury', assist: 'Fadi Daher' },
-      { minute: 55, type: 'goal', teamId: 'arg', player: 'Rami Saad', assist: 'Karim Haddad' },
+      { minute: 33, type: 'goal', teamId: 'jpn', player: 'Nader Saleh', assist: 'Yazan Abbas' },
+      { minute: 57, type: 'goal', teamId: 'fra', player: 'Anton Bishara', assist: 'George Tannous' },
+      { minute: 81, type: 'goal', teamId: 'fra', player: 'Anton Bishara', assist: 'George Tannous' },
     ],
   },
-  {
-    id: 'g-a-3',
-    stage: 'Group',
-    group: 'A',
-    matchday: 3,
-    date: '2026-06-15',
-    time: '19:30',
-    venue: 'Deir Hanna Stadium',
-    homeTeamId: 'jpn',
-    awayTeamId: 'mar',
-    status: 'scheduled',
-  },
-  {
-    id: 'g-b-1',
-    stage: 'Group',
-    group: 'B',
-    matchday: 1,
-    date: '2026-06-10',
-    time: '21:00',
-    venue: 'Municipal Field',
-    homeTeamId: 'bra',
-    awayTeamId: 'gha',
+  4: {
     homeScore: 3,
-    awayScore: 0,
+    awayScore: 1,
     status: 'final',
     events: [
       { minute: 8, type: 'goal', teamId: 'bra', player: 'Sami Nassar', assist: 'Majd Awad' },
       { minute: 44, type: 'goal', teamId: 'bra', player: 'Sami Nassar', assist: 'Majd Awad' },
       { minute: 66, type: 'goal', teamId: 'bra', player: 'Majd Awad', assist: 'Sami Nassar' },
+      { minute: 74, type: 'goal', teamId: 'ger', player: 'Ameer Farah', assist: 'Mazen Salame' },
     ],
   },
-  {
-    id: 'g-b-2',
-    stage: 'Group',
-    group: 'B',
-    matchday: 2,
-    date: '2026-06-13',
-    time: '19:30',
-    venue: 'Deir Hanna Stadium',
-    homeTeamId: 'ger',
-    awayTeamId: 'bra',
+  5: {
     homeScore: 1,
     awayScore: 1,
-    status: 'final',
+    status: 'live',
+    minute: 62,
     events: [
-      { minute: 29, type: 'goal', teamId: 'ger', player: 'Ameer Farah', assist: 'Mazen Salame' },
-      { minute: 74, type: 'goal', teamId: 'bra', player: 'Sami Nassar', assist: 'Majd Awad' },
+      { minute: 21, type: 'goal', teamId: 'fra', player: 'Anton Bishara', assist: 'George Tannous' },
+      { minute: 55, type: 'goal', teamId: 'arg', player: 'Rami Saad', assist: 'Karim Haddad' },
     ],
   },
-  {
-    id: 'g-b-3',
-    stage: 'Group',
-    group: 'B',
-    matchday: 3,
-    date: '2026-06-16',
-    time: '20:15',
-    venue: 'Municipal Field',
-    homeTeamId: 'gha',
-    awayTeamId: 'ger',
-    status: 'scheduled',
-  },
-  {
-    id: 'g-c-1',
-    stage: 'Group',
-    group: 'C',
-    matchday: 1,
-    date: '2026-06-11',
-    time: '19:30',
-    venue: 'Deir Hanna Stadium',
-    homeTeamId: 'fra',
-    awayTeamId: 'por',
-    homeScore: 2,
-    awayScore: 2,
-    status: 'final',
-    events: [
-      { minute: 16, type: 'goal', teamId: 'fra', player: 'Anton Bishara', assist: 'George Tannous' },
-      { minute: 33, type: 'goal', teamId: 'por', player: 'Omar Kassis', assist: 'Jad Sabbagh' },
-      { minute: 57, type: 'goal', teamId: 'por', player: 'Jad Sabbagh', assist: 'Omar Kassis' },
-      { minute: 81, type: 'goal', teamId: 'fra', player: 'Anton Bishara', assist: 'George Tannous' },
-    ],
-  },
-  {
-    id: 'g-c-2',
-    stage: 'Group',
-    group: 'C',
-    matchday: 2,
-    date: '2026-06-14',
-    time: '20:15',
-    venue: 'Municipal Field',
-    homeTeamId: 'esp',
-    awayTeamId: 'fra',
-    status: 'scheduled',
-  },
-  {
-    id: 'g-c-3',
-    stage: 'Group',
-    group: 'C',
-    matchday: 3,
-    date: '2026-06-17',
-    time: '19:30',
-    venue: 'Deir Hanna Stadium',
-    homeTeamId: 'por',
-    awayTeamId: 'esp',
-    status: 'scheduled',
-  },
-  {
-    id: 'g-d-1',
-    stage: 'Group',
-    group: 'D',
-    matchday: 1,
-    date: '2026-06-11',
-    time: '21:00',
-    venue: 'Municipal Field',
-    homeTeamId: 'eng',
-    awayTeamId: 'usa',
-    homeScore: 1,
-    awayScore: 0,
-    status: 'final',
-    events: [
-      { minute: 49, type: 'goal', teamId: 'eng', player: 'Peter Karam', assist: 'Michel Sayegh' },
-    ],
-  },
-  {
-    id: 'g-d-2',
-    stage: 'Group',
-    group: 'D',
-    matchday: 2,
-    date: '2026-06-14',
-    time: '19:30',
-    venue: 'Deir Hanna Stadium',
-    homeTeamId: 'ita',
-    awayTeamId: 'eng',
-    homeScore: 0,
-    awayScore: 2,
-    status: 'final',
-    events: [
-      { minute: 22, type: 'goal', teamId: 'eng', player: 'Michel Sayegh', assist: 'Peter Karam' },
-      { minute: 68, type: 'goal', teamId: 'eng', player: 'Peter Karam', assist: 'Michel Sayegh' },
-    ],
-  },
-  {
-    id: 'g-d-3',
-    stage: 'Group',
-    group: 'D',
-    matchday: 3,
-    date: '2026-06-18',
-    time: '20:15',
-    venue: 'Municipal Field',
-    homeTeamId: 'usa',
-    awayTeamId: 'ita',
-    status: 'scheduled',
-  },
-]
+}
+
+export const matches = leagueFixtureRows.map(([homeTeamId, awayTeamId], index) => {
+  const fixtureNumber = index + 1
+  const round = Math.floor(index / 4) + 1
+  const detail = leagueMatchDetails[fixtureNumber] ?? { status: 'scheduled' }
+  const day = 10 + Math.floor(index / 2)
+
+  return {
+    id: `league-${fixtureNumber}`,
+    stage: tournamentFormat.stages.league,
+    group: leagueGroup,
+    matchday: round,
+    date: `2026-06-${String(day).padStart(2, '0')}`,
+    time: index % 2 === 0 ? '19:30' : '21:00',
+    venue: index % 2 === 0 ? 'Deir Hanna Stadium' : 'Municipal Field',
+    homeTeamId,
+    awayTeamId,
+    ...detail,
+  }
+})
 
 export const knockoutMatches = [
-  { id: 'qf-1', stage: 'Quarter-final', date: '2026-06-21', time: '19:30', venue: 'Deir Hanna Stadium', homeLabel: 'Winner Group A', awayLabel: 'Runner-up Group B', status: 'scheduled' },
-  { id: 'qf-2', stage: 'Quarter-final', date: '2026-06-21', time: '21:00', venue: 'Municipal Field', homeLabel: 'Winner Group C', awayLabel: 'Runner-up Group D', status: 'scheduled' },
-  { id: 'qf-3', stage: 'Quarter-final', date: '2026-06-22', time: '19:30', venue: 'Deir Hanna Stadium', homeLabel: 'Winner Group B', awayLabel: 'Runner-up Group A', status: 'scheduled' },
-  { id: 'qf-4', stage: 'Quarter-final', date: '2026-06-22', time: '21:00', venue: 'Municipal Field', homeLabel: 'Winner Group D', awayLabel: 'Runner-up Group C', status: 'scheduled' },
-  { id: 'sf-1', stage: 'Semi-final', date: '2026-06-25', time: '20:15', venue: 'Deir Hanna Stadium', homeLabel: 'Winner QF1', awayLabel: 'Winner QF2', status: 'scheduled' },
-  { id: 'sf-2', stage: 'Semi-final', date: '2026-06-26', time: '20:15', venue: 'Deir Hanna Stadium', homeLabel: 'Winner QF3', awayLabel: 'Winner QF4', status: 'scheduled' },
-  { id: 'final', stage: 'Final', date: '2026-06-29', time: '21:00', venue: 'Deir Hanna Stadium', homeLabel: 'Winner SF1', awayLabel: 'Winner SF2', status: 'scheduled' },
+  { id: 'sf-1', stage: tournamentFormat.stages.semiFinal, date: '2026-06-25', time: '20:15', venue: 'Deir Hanna Stadium', homeLabel: '1st place', awayLabel: '4th place', status: 'scheduled' },
+  { id: 'sf-2', stage: tournamentFormat.stages.semiFinal, date: '2026-06-26', time: '20:15', venue: 'Deir Hanna Stadium', homeLabel: '2nd place', awayLabel: '3rd place', status: 'scheduled' },
+  { id: 'third', stage: tournamentFormat.stages.thirdPlace, date: '2026-06-29', time: '19:30', venue: 'Municipal Field', homeLabel: 'Loser SF1', awayLabel: 'Loser SF2', status: 'scheduled' },
+  { id: 'final', stage: tournamentFormat.stages.final, date: '2026-06-29', time: '21:00', venue: 'Deir Hanna Stadium', homeLabel: 'Winner SF1', awayLabel: 'Winner SF2', status: 'scheduled' },
 ]
 
 const squadNumbers = [1, 2, 3, 4, 5, 6, 8, 10, 7, 9]
@@ -333,62 +211,6 @@ const squadNames = {
     'Mazen Matar',
     'Daniel Karam',
   ],
-  esp: [
-    'Tony Khoury',
-    'Amir Sabbagh',
-    'Karim Nicola',
-    'Yazan Matar',
-    'Peter Daher',
-    'Miled Daoud',
-    'George Saad',
-    'Daniel Hanna',
-    'Wadee Jaber',
-    'Sami Kassis',
-    'Elias Farah',
-    'Jalal Awwad',
-  ],
-  eng: [
-    'Rayan Khoury',
-    'Samir Saad',
-    'Nader Daher',
-    'Majd Jaber',
-    'Loai Kassis',
-    'Michel Sayegh',
-    'Amir Matar',
-    'Peter Karam',
-    'Anton Nicola',
-    'Fadi Elias',
-    'Tarek Bishara',
-    'Omar Salman',
-  ],
-  ita: [
-    'George Karam',
-    'Saleem Khoury',
-    'Jad Farah',
-    'Michael Hanna',
-    'Tamer Saad',
-    'Samir Nicola',
-    'Bassem Daher',
-    'Tony Asmar',
-    'Naim Nassar',
-    'Daniel Elias',
-    'Firas Matar',
-    'Karim Bishara',
-  ],
-  usa: [
-    'Ameer Saad',
-    'Michel Daher',
-    'Bassem Kassis',
-    'Tarek Hanna',
-    'Laith Farah',
-    'Majd Matar',
-    'Karim Jaber',
-    'Johnny Haddad',
-    'Sami Nicola',
-    'Rayan Khoury',
-    'George Salman',
-    'Fadi Awwad',
-  ],
 }
 
 const playerStats = {
@@ -407,20 +229,16 @@ const playerStats = {
   'fra:George Tannous': { assists: 2, yellowCards: 1 },
   'por:Omar Kassis': { goals: 1, assists: 1 },
   'por:Jad Sabbagh': { goals: 1 },
-  'eng:Peter Karam': { goals: 2, assists: 1 },
-  'eng:Michel Sayegh': { goals: 1, assists: 1 },
-  'ita:Samir Nicola': { yellowCards: 1 },
-  'usa:Rayan Khoury': { yellowCards: 1 },
 }
 
-export const players = Object.entries(squadNames).flatMap(([teamId, names]) =>
-  names.slice(0, 10).map((name, index) => {
-    const stats = playerStats[`${teamId}:${name}`] ?? {}
+export const players = teams.flatMap((team) =>
+  (squadNames[team.id] ?? []).slice(0, 10).map((name, index) => {
+    const stats = playerStats[`${team.id}:${name}`] ?? {}
 
     return {
-      id: `p-${teamId}-${index + 1}`,
+      id: `p-${team.id}-${index + 1}`,
       name,
-      teamId,
+      teamId: team.id,
       number: squadNumbers[index],
       position: squadPositions[index],
       goals: 0,

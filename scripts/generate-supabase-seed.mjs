@@ -18,15 +18,38 @@ function sqlNumber(value) {
   return Number.isFinite(Number(value)) ? String(Number(value)) : 'null'
 }
 
+function sqlList(values) {
+  return values.map(sqlString).join(', ')
+}
+
 function values(rows) {
   return rows.join(',\n')
 }
 
 const allMatches = [...matches, ...knockoutMatches]
+const teamIds = teams.map((team) => team.id)
+const playerIds = players.map((player) => player.id)
+const matchIds = allMatches.map((match) => match.id)
 
 console.log('-- Generated seed data for Deir Hanna Local World Cup')
 console.log('-- Run supabase/schema.sql first, then this output in the Supabase SQL editor.')
 console.log('begin;')
+
+console.log(`
+-- Remove stale demo records when the tournament format changes.
+delete from public.match_votes where match_id not in (${sqlList(matchIds)});
+delete from public.player_match_stats where match_id not in (${sqlList(matchIds)}) or player_id not in (${sqlList(playerIds)});
+delete from public.match_events where match_id not in (${sqlList(matchIds)});
+delete from public.lineup_players
+where lineup_id in (select id from public.lineups where match_id not in (${sqlList(matchIds)}));
+delete from public.lineups where match_id not in (${sqlList(matchIds)});
+delete from public.matches where id not in (${sqlList(matchIds)});
+delete from public.tournament_votes
+where (vote_type = 'tournament_winner' and candidate_id not in (${sqlList(teamIds)}))
+   or (vote_type in ('top_scorer', 'best_player') and candidate_id not in (${sqlList(playerIds)}));
+delete from public.players where id not in (${sqlList(playerIds)});
+delete from public.teams where id not in (${sqlList(teamIds)});
+`)
 
 console.log(`
 insert into public.teams (id, country, code, group_code, color, secondary, sort_order)

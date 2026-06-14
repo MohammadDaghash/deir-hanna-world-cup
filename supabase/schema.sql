@@ -155,8 +155,8 @@ begin
     raise exception 'Match not found';
   end if;
 
-  if new.choice = 'draw' and match_stage <> 'Group' then
-    raise exception 'Draw votes are only allowed for group matches';
+  if new.choice = 'draw' and match_stage <> 'League' then
+    raise exception 'Draw votes are only allowed for league matches';
   end if;
 
   return new;
