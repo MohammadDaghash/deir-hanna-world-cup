@@ -27,8 +27,8 @@ create table if not exists public.players (
   name_en text not null default '',
   name_he text not null default '',
   name_ar text not null default '',
-  number int not null,
-  position text not null,
+  number int,
+  position text,
   goals int not null default 0,
   assists int not null default 0,
   yellow_cards int not null default 0,
@@ -140,6 +140,10 @@ set country_en = coalesce(nullif(country_en, ''), country),
 alter table public.players add column if not exists name_en text not null default '';
 alter table public.players add column if not exists name_he text not null default '';
 alter table public.players add column if not exists name_ar text not null default '';
+alter table public.players alter column number drop not null;
+alter table public.players alter column position drop not null;
+alter table public.players alter column number drop default;
+alter table public.players alter column position drop default;
 update public.players
 set name_en = coalesce(nullif(name_en, ''), name),
     name_he = coalesce(name_he, ''),
@@ -149,9 +153,10 @@ alter table public.matches add column if not exists venue_en text not null defau
 alter table public.matches add column if not exists venue_he text not null default '';
 alter table public.matches add column if not exists venue_ar text not null default '';
 update public.matches
-set venue_en = coalesce(nullif(venue_en, ''), venue),
-    venue_he = coalesce(venue_he, ''),
-    venue_ar = coalesce(venue_ar, '');
+set venue = 'El Maracana Stadium - Deir Hanna',
+    venue_en = 'El Maracana Stadium - Deir Hanna',
+    venue_he = 'El Maracana Stadium - Deir Hanna',
+    venue_ar = 'El Maracana Stadium - Deir Hanna';
 
 create or replace function public.is_admin()
 returns boolean

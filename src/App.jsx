@@ -103,13 +103,6 @@ const statusOptions = [
   { label: 'Live', value: 'live' },
   { label: 'Final', value: 'final' },
 ]
-const positionOptions = [
-  { label: 'GK', value: 'GK' },
-  { label: 'DF', value: 'DF' },
-  { label: 'MF', value: 'MF' },
-  { label: 'FW', value: 'FW' },
-  { label: 'WG', value: 'WG' },
-]
 const emptyTournamentData = {
   teams: [],
   players: [],
@@ -179,7 +172,7 @@ function makeUniqueId(prefix, label, existingIds) {
 function makeLineupForTeam(teamId, players) {
   const playerIds = players
     .filter((player) => player.teamId === teamId)
-    .sort((a, b) => a.number - b.number)
+    .sort((a, b) => a.name.localeCompare(b.name))
     .map((player) => player.id)
 
   return {
@@ -601,8 +594,6 @@ function App() {
       nameHe: playerDraft.nameHe.trim(),
       nameAr: playerDraft.nameAr.trim(),
       teamId: playerDraft.teamId,
-      number: Number(playerDraft.number),
-      position: playerDraft.position,
       goals: 0,
       assists: 0,
       yellowCards: 0,
@@ -643,7 +634,6 @@ function App() {
         nameEn: playerDraft.nameEn.trim(),
         nameHe: playerDraft.nameHe.trim(),
         nameAr: playerDraft.nameAr.trim(),
-        number: Number(playerDraft.number),
       })
     })
   }
@@ -661,10 +651,10 @@ function App() {
       matchday: Number(matchDraft.matchday),
       homeTeamId: matchDraft.homeTeamId || undefined,
       awayTeamId: matchDraft.awayTeamId || undefined,
-      venue: matchDraft.venueEn?.trim() || matchDraft.venue?.trim() || '',
-      venueEn: matchDraft.venueEn?.trim() || matchDraft.venue?.trim() || '',
-      venueHe: matchDraft.venueHe?.trim() || '',
-      venueAr: matchDraft.venueAr?.trim() || '',
+      venue: tournamentFormat.fixedVenue,
+      venueEn: tournamentFormat.fixedVenue,
+      venueHe: tournamentFormat.fixedVenue,
+      venueAr: tournamentFormat.fixedVenue,
       homeScore: normalizeScore(matchDraft.homeScore),
       awayScore: normalizeScore(matchDraft.awayScore),
       minute: matchDraft.minute === '' ? undefined : Number(matchDraft.minute),
@@ -2409,7 +2399,7 @@ function LineupTeamColumn({ team, lineup, side }) {
           <div className="min-w-0">
             <h3 className="truncate text-sm font-semibold text-[#14201b]">{team.country}</h3>
             <p className="truncate text-xs text-[#65756b]">
-              {side === 'home' ? 'Home' : 'Away'} / {lineup.formation}
+              {side === 'home' ? 'Team 1' : 'Team 2'} / {lineup.formation}
             </p>
           </div>
         </div>
@@ -2443,14 +2433,11 @@ function LineupList({ title, players }) {
 
 function LineupPlayerRow({ player }) {
   return (
-    <li className="grid min-h-10 grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-[#f8faf5] px-3">
+    <li className="grid min-h-10 grid-cols-[36px_minmax(0,1fr)] items-center gap-3 rounded-md bg-[#f8faf5] px-3">
       <span className="grid h-7 w-7 place-items-center rounded-md bg-white text-xs font-semibold text-[#34433a]">
-        {player.number}
+        <UserRound className="h-4 w-4" />
       </span>
       <span className="min-w-0 truncate text-sm font-medium text-[#14201b]">{player.name}</span>
-      <span className="rounded-md bg-[#eef3e9] px-2 py-1 text-xs font-semibold text-[#65756b]">
-        {player.position}
-      </span>
     </li>
   )
 }
@@ -2651,7 +2638,7 @@ function PlayerStatRow({ onPlayerSelect, player, index, value, label }) {
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-[#14201b]">{player.name}</p>
           <p className="truncate text-xs text-[#65756b]">
-            {player.team.country} / #{player.number} / {player.position}
+            {player.team.country}
           </p>
         </div>
       </div>
@@ -2665,7 +2652,6 @@ function PlayerStatRow({ onPlayerSelect, player, index, value, label }) {
 
 function KnockoutPanel({ matches, teams }) {
   const semiFinals = matches.filter((match) => match.stage === tournamentFormat.stages.semiFinal)
-  const thirdPlaceMatch = matches.find((match) => match.stage === tournamentFormat.stages.thirdPlace)
   const finalMatch = matches.find((match) => match.stage === tournamentFormat.stages.final)
 
   return (
@@ -2688,19 +2674,12 @@ function KnockoutPanel({ matches, teams }) {
               title="2nd vs 3rd"
             />
           </div>
-          {thirdPlaceMatch && (
-            <div className="mx-auto w-full max-w-sm">
-              <p className="mb-3 text-center text-xs font-semibold uppercase text-[#65756b]">Third Place</p>
-              <BracketMatchNode match={thirdPlaceMatch} teams={teams} />
-            </div>
-          )}
         </div>
       </div>
       <MobileKnockoutPath
         finalMatch={finalMatch}
         semiFinals={semiFinals}
         teams={teams}
-        thirdPlaceMatch={thirdPlaceMatch}
       />
     </section>
   )
@@ -2711,17 +2690,12 @@ function getNeutralTeamLabel(match, teams, side) {
   return team?.country ?? 'TBD'
 }
 
-function MobileKnockoutPath({ finalMatch, semiFinals, teams, thirdPlaceMatch }) {
+function MobileKnockoutPath({ finalMatch, semiFinals, teams }) {
   const stages = [
     {
       title: 'Semi-finals',
       detail: '1st vs 4th / 2nd vs 3rd',
       matches: semiFinals,
-    },
-    {
-      title: 'Third Place',
-      detail: 'Semi-final losers',
-      matches: thirdPlaceMatch ? [thirdPlaceMatch] : [],
     },
     {
       title: 'Final',
@@ -2735,7 +2709,7 @@ function MobileKnockoutPath({ finalMatch, semiFinals, teams, thirdPlaceMatch }) 
     <div className="grid gap-4 border-t border-[#e5e9e0] p-3 lg:hidden">
       {stages.map((stage, index) => (
         <div key={stage.title} className="grid gap-3">
-          {index > 0 && <MobileAdvanceConnector label={stage.title === 'Third Place' ? 'Losers play' : 'Winners advance'} />}
+          {index > 0 && <MobileAdvanceConnector label="Winners advance" />}
           <MobileBracketStage
             detail={stage.detail}
             finalStage={stage.finalStage}
@@ -3178,7 +3152,7 @@ function TeamPage({ allMatches, onBack, onMatchSelect, onPlayerSelect, players, 
   const teamMatches = getTeamMatches(allMatches, team.id)
   const standing = getTeamStandingRow(standings, team.id)
   const filteredPlayers = players.filter((player) =>
-    [player.name, player.number].join(' ').toLowerCase().includes(playerQuery.trim().toLowerCase()),
+    player.name.toLowerCase().includes(playerQuery.trim().toLowerCase()),
   )
 
   return (
@@ -3251,7 +3225,7 @@ function TeamPage({ allMatches, onBack, onMatchSelect, onPlayerSelect, players, 
         <section className="rounded-lg border border-[#dce1d7] bg-white shadow-sm">
           <PanelHeader icon={BarChart3} title="Statistics" detail="Tournament totals" />
           <div className="grid gap-3 border-t border-[#e5e9e0] p-4 sm:grid-cols-2 lg:grid-cols-4">
-            <AdminMetric label="Position" value={standing ? `#${standing.rank}` : '-'} />
+            <AdminMetric label="Rank" value={standing ? `#${standing.rank}` : '-'} />
             <AdminMetric label="Points" value={standing?.points ?? 0} />
             <AdminMetric label="Goals" value={`${standing?.goalsFor ?? 0}:${standing?.goalsAgainst ?? 0}`} />
             <AdminMetric label="Form" value={getTeamForm(allMatches, team.id).join(' ') || '-'} />
@@ -3288,7 +3262,7 @@ function CleanPlayerCard({ onClick, player, team }) {
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold text-[#14201b]">{player.name}</span>
         <span className="block truncate text-xs text-[#65756b]">
-          #{player.number} / {team.country}
+          {team.country}
         </span>
       </span>
       <FlagMark team={team} small />
@@ -3347,7 +3321,7 @@ function PlayerPage({ allMatches, onBack, onMatchSelect, onTeamSelect, player, t
               onClick={() => team?.id && onTeamSelect(team.id)}
             >
               {team && <FlagMark team={team} small />}
-              <span className="truncate">{team?.country} / #{player.number}</span>
+              <span className="truncate">{team?.country}</span>
             </button>
           </div>
         </div>
@@ -3528,10 +3502,10 @@ function createNewMatchDraft(teams) {
     matchday: 1,
     date: '2026-06-20',
     time: '19:30',
-    venue: '',
-    venueEn: '',
-    venueHe: '',
-    venueAr: '',
+    venue: tournamentFormat.fixedVenue,
+    venueEn: tournamentFormat.fixedVenue,
+    venueHe: tournamentFormat.fixedVenue,
+    venueAr: tournamentFormat.fixedVenue,
     homeTeamId: teams[0]?.id ?? '',
     awayTeamId: teams[1]?.id ?? '',
     homeScore: '',
@@ -3562,9 +3536,10 @@ function matchToAdminDraft(match) {
     homeScore: match.homeScore ?? '',
     awayScore: match.awayScore ?? '',
     minute: match.minute ?? '',
-    venueEn: match.venueEn ?? match.venue ?? '',
-    venueHe: match.venueHe ?? '',
-    venueAr: match.venueAr ?? '',
+    venue: tournamentFormat.fixedVenue,
+    venueEn: tournamentFormat.fixedVenue,
+    venueHe: tournamentFormat.fixedVenue,
+    venueAr: tournamentFormat.fixedVenue,
   }
 }
 
@@ -3602,8 +3577,6 @@ function AdminBoard({
     nameEn: '',
     nameHe: '',
     nameAr: '',
-    number: 13,
-    position: 'MF',
   })
   const [newMatchDraft, setNewMatchDraft] = useState(() => createNewMatchDraft(teams))
   const [selectedMatchId, setSelectedMatchId] = useState(allMatches[0]?.id ?? '')
@@ -3668,7 +3641,6 @@ function AdminBoard({
       nameEn: '',
       nameHe: '',
       nameAr: '',
-      number: Number(draft.number) + 1,
     }))
   }
 
@@ -3850,23 +3822,6 @@ function AdminBoard({
               placeholder="اسم اللاعب"
               value={playerDraft.nameAr}
             />
-            <FieldGrid>
-              <AdminTextInput
-                disabled={disabled}
-                label="Number"
-                min="1"
-                onChange={(value) => setPlayerDraft((draft) => ({ ...draft, number: value }))}
-                type="number"
-                value={playerDraft.number}
-              />
-              <AdminSelect
-                disabled={disabled}
-                label="Position"
-                onChange={(value) => setPlayerDraft((draft) => ({ ...draft, position: value }))}
-                options={positionOptions}
-                value={playerDraft.position}
-              />
-            </FieldGrid>
             <AdminSubmit
               disabled={disabled || !teams.length || selectedTeamIsFull}
               icon={Plus}
@@ -4008,7 +3963,7 @@ function PlayerManagementPanel({ disabled, onDeletePlayer, onSavePlayer, players
   const selectedPlayer = players.find((player) => player.id === effectiveSelectedPlayerId)
 
   const playerOptions = players.map((player) => ({
-    label: `${player.nameEn || player.name} #${player.number}`,
+    label: player.nameEn || player.name,
     value: player.id,
   }))
 
@@ -4063,10 +4018,6 @@ function PlayerEditForm({ disabled, onDeletePlayer, onSavePlayer, player, teamOp
       <AdminTextInput disabled={disabled} label="Player name - English" onChange={(value) => setDraft((current) => ({ ...current, nameEn: value }))} value={draft.nameEn ?? ''} />
       <AdminTextInput disabled={disabled} label="Player name - Hebrew" onChange={(value) => setDraft((current) => ({ ...current, nameHe: value }))} value={draft.nameHe ?? ''} />
       <AdminTextInput disabled={disabled} label="Player name - Arabic" onChange={(value) => setDraft((current) => ({ ...current, nameAr: value }))} value={draft.nameAr ?? ''} />
-      <FieldGrid>
-        <AdminTextInput disabled={disabled} label="Number" min="1" onChange={(value) => setDraft((current) => ({ ...current, number: value }))} type="number" value={draft.number ?? ''} />
-        <AdminSelect disabled={disabled} label="Position" onChange={(value) => setDraft((current) => ({ ...current, position: value }))} options={positionOptions} value={draft.position ?? 'MF'} />
-      </FieldGrid>
       <div className="flex flex-wrap gap-2">
         <AdminSubmit disabled={disabled} icon={Save} label="Save player" />
         <AdminDangerButton disabled={disabled} icon={Trash2} label="Delete player" onClick={submitPlayerDelete} />
@@ -4108,38 +4059,18 @@ function MatchDraftFields({ disabled, draft, setDraft, teamOptions }) {
           value={draft.time}
         />
       </FieldGrid>
-      <AdminTextInput
-        disabled={disabled}
-        label="Venue/location - English"
-        onChange={(value) => updateDraft('venueEn', value)}
-        placeholder="Stadium or location"
-        value={draft.venueEn ?? ''}
-      />
-      <AdminTextInput
-        disabled={disabled}
-        label="Venue/location - Hebrew"
-        onChange={(value) => updateDraft('venueHe', value)}
-        placeholder="אצטדיון או מיקום"
-        value={draft.venueHe ?? ''}
-      />
-      <AdminTextInput
-        disabled={disabled}
-        label="Venue/location - Arabic"
-        onChange={(value) => updateDraft('venueAr', value)}
-        placeholder="الملعب أو الموقع"
-        value={draft.venueAr ?? ''}
-      />
+      <AdminMetric label="Venue" value={tournamentFormat.fixedVenue} />
       <FieldGrid>
         <AdminSelect
           disabled={disabled}
-          label="Home"
+          label="Team 1"
           onChange={(value) => updateDraft('homeTeamId', value)}
           options={[{ label: 'TBD', value: '' }, ...teamOptions]}
           value={draft.homeTeamId}
         />
         <AdminSelect
           disabled={disabled}
-          label="Away"
+          label="Team 2"
           onChange={(value) => updateDraft('awayTeamId', value)}
           options={[{ label: 'TBD', value: '' }, ...teamOptions]}
           value={draft.awayTeamId}
@@ -4165,7 +4096,7 @@ function MatchDraftFields({ disabled, draft, setDraft, teamOptions }) {
       <FieldGrid>
         <AdminTextInput
           disabled={disabled}
-          label="Home score"
+          label="Team 1 score"
           min="0"
           onChange={(value) => updateDraft('homeScore', value)}
           type="number"
@@ -4173,7 +4104,7 @@ function MatchDraftFields({ disabled, draft, setDraft, teamOptions }) {
         />
         <AdminTextInput
           disabled={disabled}
-          label="Away score"
+          label="Team 2 score"
           min="0"
           onChange={(value) => updateDraft('awayScore', value)}
           type="number"

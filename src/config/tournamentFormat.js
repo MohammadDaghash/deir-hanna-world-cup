@@ -5,32 +5,29 @@ export const tournamentFormat = {
   teamCount: 8,
   qualifyingTeams: 4,
   leagueRounds: 7,
+  fixedVenue: 'El Maracana Stadium - Deir Hanna',
   stages: {
     league: 'League',
     semiFinal: 'Semi-final',
-    thirdPlace: 'Third place',
     final: 'Final',
   },
 }
 
 export const stageLabels = {
-  [tournamentFormat.stages.league]: 'League',
-  [tournamentFormat.stages.semiFinal]: 'Semi-finals',
-  [tournamentFormat.stages.thirdPlace]: 'Third Place',
-  [tournamentFormat.stages.final]: 'Final',
+[tournamentFormat.stages.league]: 'League',
+[tournamentFormat.stages.semiFinal]: 'Semi-finals',
+[tournamentFormat.stages.final]: 'Final',
 }
 
 export const stageOptions = [
-  { label: 'League', value: tournamentFormat.stages.league },
-  { label: 'Semi-final', value: tournamentFormat.stages.semiFinal },
-  { label: 'Third place', value: tournamentFormat.stages.thirdPlace },
-  { label: 'Final', value: tournamentFormat.stages.final },
+{ label: 'League', value: tournamentFormat.stages.league },
+{ label: 'Semi-final', value: tournamentFormat.stages.semiFinal },
+{ label: 'Final', value: tournamentFormat.stages.final },
 ]
 
 export const knockoutStageFilters = [
-  { id: tournamentFormat.stages.semiFinal, label: 'Semi-finals' },
-  { id: tournamentFormat.stages.thirdPlace, label: 'Third Place' },
-  { id: tournamentFormat.stages.final, label: 'Final' },
+{ id: tournamentFormat.stages.semiFinal, label: 'Semi-finals' },
+{ id: tournamentFormat.stages.final, label: 'Final' },
 ]
 
 export const roundFilterOptions = [

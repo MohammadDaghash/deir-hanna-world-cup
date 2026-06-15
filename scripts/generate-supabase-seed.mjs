@@ -5,6 +5,7 @@ import {
   players,
   teams,
 } from '../src/data/tournament.js'
+import { tournamentFormat } from '../src/config/tournamentFormat.js'
 
 function sqlString(value) {
   if (value === null || value === undefined || value === '') {
@@ -34,6 +35,7 @@ const allMatches = [...matches, ...knockoutMatches]
 const teamIds = teams.map((team) => team.id)
 const playerIds = players.map((player) => player.id)
 const matchIds = allMatches.map((match) => match.id)
+const fixedVenue = sqlString(tournamentFormat.fixedVenue)
 
 console.log('-- Generated seed data for Deir Hanna Local World Cup')
 console.log('-- Run supabase/schema.sql first, then this output in the Supabase SQL editor.')
@@ -83,12 +85,12 @@ on conflict (id) do update set
 `)
 
 console.log(`
-insert into public.players (id, team_id, name, name_en, name_he, name_ar, number, position, goals, assists, yellow_cards, red_cards)
+insert into public.players (id, team_id, name, name_en, name_he, name_ar, goals, assists, yellow_cards, red_cards)
 values
 ${values(
   players.map(
     (player) =>
-      `(${sqlString(player.id)}, ${sqlString(player.teamId)}, ${sqlString(player.nameEn ?? player.name)}, ${sqlString(player.nameEn ?? player.name)}, ${sqlString(player.nameHe)}, ${sqlString(player.nameAr)}, ${sqlNumber(player.number)}, ${sqlString(player.position)}, ${sqlNumber(player.goals)}, ${sqlNumber(player.assists)}, ${sqlNumber(player.yellowCards)}, ${sqlNumber(player.redCards)})`,
+      `(${sqlString(player.id)}, ${sqlString(player.teamId)}, ${sqlString(player.nameEn ?? player.name)}, ${sqlString(player.nameEn ?? player.name)}, ${sqlString(player.nameHe)}, ${sqlString(player.nameAr)}, ${sqlNumber(player.goals)}, ${sqlNumber(player.assists)}, ${sqlNumber(player.yellowCards)}, ${sqlNumber(player.redCards)})`,
   ),
 )}
 on conflict (id) do update set
@@ -97,8 +99,6 @@ on conflict (id) do update set
   name_en = excluded.name_en,
   name_he = excluded.name_he,
   name_ar = excluded.name_ar,
-  number = excluded.number,
-  position = excluded.position,
   goals = excluded.goals,
   assists = excluded.assists,
   yellow_cards = excluded.yellow_cards,
@@ -115,7 +115,7 @@ values
 ${values(
   allMatches.map(
     (match) =>
-      `(${sqlString(match.id)}, ${sqlString(match.stage)}, ${sqlString(match.group)}, ${sqlNumber(match.matchday)}, ${sqlString(match.date)}, ${sqlString(match.time)}, ${sqlString(match.venueEn ?? match.venue)}, ${sqlString(match.venueEn ?? match.venue)}, ${sqlString(match.venueHe)}, ${sqlString(match.venueAr)}, ${sqlString(match.homeTeamId)}, ${sqlString(match.awayTeamId)}, ${sqlString(match.homeLabel)}, ${sqlString(match.awayLabel)}, ${sqlNumber(match.homeScore)}, ${sqlNumber(match.awayScore)}, ${sqlString(match.status)}, ${sqlNumber(match.minute)})`,
+      `(${sqlString(match.id)}, ${sqlString(match.stage)}, ${sqlString(match.group)}, ${sqlNumber(match.matchday)}, ${sqlString(match.date)}, ${sqlString(match.time)}, ${fixedVenue}, ${fixedVenue}, ${fixedVenue}, ${fixedVenue}, ${sqlString(match.homeTeamId)}, ${sqlString(match.awayTeamId)}, ${sqlString(match.homeLabel)}, ${sqlString(match.awayLabel)}, ${sqlNumber(match.homeScore)}, ${sqlNumber(match.awayScore)}, ${sqlString(match.status)}, ${sqlNumber(match.minute)})`,
   ),
 )}
 on conflict (id) do update set

@@ -147,7 +147,7 @@ export function getPlayersByTeam(players) {
     }
 
     playersByTeam[player.teamId].push(player)
-    playersByTeam[player.teamId].sort((a, b) => a.number - b.number)
+    playersByTeam[player.teamId].sort((a, b) => a.name.localeCompare(b.name))
 
     return playersByTeam
   }, {})

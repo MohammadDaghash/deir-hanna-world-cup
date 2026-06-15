@@ -8,13 +8,14 @@ React + Vite starter for the Deir Hanna local World Cup tournament app.
 - Real tournament data entered manually by admins
 - Clickable team cards with squad and detail pages
 - 10-player squad limit with 7 starters and 3 bench players
+- Player entry with team and manually entered English, Hebrew, and Arabic names
 - Clickable player cards with goals, assists, history, and next games
 - English, Hebrew, and Arabic manual names for teams and players
 - Automatic league table calculation
 - Match schedule with final, live, and scheduled states
 - Clickable match rows with scorers, assists, final score, time, and lineups
 - Player leaderboards for goals, assists, and goal contributions
-- Single-game knockout path with semi-finals, third-place match, and final
+- Single-game knockout path with semi-finals and final
 - Supabase-backed admin panel for adding, editing, and deleting teams, players, and matches
 - Supabase-backed prediction voting with one browser vote per match
 
@@ -37,6 +38,7 @@ node scripts/verify-real-data-mode.mjs
    - `VITE_SUPABASE_ANON_KEY`
 3. Run `supabase/schema.sql` in the Supabase SQL editor.
    - For an existing demo database, run `supabase/migrations/20260614_prepare_real_data_mode.sql` once. It adds multilingual columns and clears tournament demo rows while preserving `admin_users`.
+   - If your database was created before player numbers/positions became optional, run `supabase/migrations/20260615_remove_player_fields_and_fix_venue.sql` once.
 4. Add your admin email:
 
 ```sql
@@ -54,7 +56,8 @@ Admin access uses Supabase magic-link email login. Public viewers do not need ac
 
 ## Next Steps
 
-- Add real teams, players, fixtures, scores, and venues from the Admin page.
+- Add real teams, players, fixtures, and scores from the Admin page.
 - Enter English, Hebrew, and Arabic names manually. The app does not auto-translate names.
+- Matches use the fixed venue: El Maracana Stadium - Deir Hanna.
 - Deploy after Supabase env vars and database schema are configured.
 - Add PWA support before sharing by QR code.

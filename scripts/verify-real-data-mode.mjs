@@ -10,6 +10,12 @@ import {
   getTeamName,
   getVenueName,
 } from '../src/utils/localization.js'
+import {
+  knockoutStageFilters,
+  roundFilterOptions,
+  stageOptions,
+  tournamentFormat,
+} from '../src/config/tournamentFormat.js'
 
 const failures = []
 
@@ -42,8 +48,11 @@ if (getTeamName(sampleTeam, 'he') !== sampleTeam.countryHe) failures.push('Hebre
 if (getTeamName(sampleTeam, 'ar') !== sampleTeam.countryAr) failures.push('Arabic team name was not selected')
 if (getPlayerName(samplePlayer, 'he') !== samplePlayer.nameHe) failures.push('Hebrew player name was not selected')
 if (getPlayerName(samplePlayer, 'ar') !== samplePlayer.nameAr) failures.push('Arabic player name was not selected')
-if (getVenueName(sampleMatch, 'he') !== sampleMatch.venueHe) failures.push('Hebrew venue name was not selected')
-if (getVenueName(sampleMatch, 'ar') !== sampleMatch.venueAr) failures.push('Arabic venue name was not selected')
+if (getVenueName(sampleMatch, 'he') !== tournamentFormat.fixedVenue) failures.push('Fixed venue was not selected for Hebrew')
+if (getVenueName(sampleMatch, 'ar') !== tournamentFormat.fixedVenue) failures.push('Fixed venue was not selected for Arabic')
+if (stageOptions.some((stage) => /third/i.test(stage.label))) failures.push('Third Place is still present in stage options')
+if (knockoutStageFilters.some((stage) => /third/i.test(stage.label))) failures.push('Third Place is still present in knockout filters')
+if (roundFilterOptions.some((round) => /third/i.test(round.label))) failures.push('Third Place is still present in round filters')
 
 if (failures.length) {
   console.error(failures.join('\n'))

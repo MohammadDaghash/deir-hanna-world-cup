@@ -1,3 +1,5 @@
+import { tournamentFormat } from '../config/tournamentFormat.js'
+
 export const languageOptions = [
   { id: 'en', label: 'English', shortLabel: 'EN', direction: 'ltr' },
   { id: 'he', label: 'עברית', shortLabel: 'HE', direction: 'rtl' },
@@ -53,12 +55,8 @@ export function getPlayerName(player, language = fallbackLanguage) {
   return firstValue(player.nameEn, player.name)
 }
 
-export function getVenueName(match, language = fallbackLanguage) {
-  if (!match) return ''
-
-  if (language === 'he') return firstValue(match.venueHe, match.venueEn, match.venue)
-  if (language === 'ar') return firstValue(match.venueAr, match.venueEn, match.venue)
-  return firstValue(match.venueEn, match.venue)
+export function getVenueName(match) {
+  return firstValue(tournamentFormat.fixedVenue, match?.venueEn, match?.venue)
 }
 
 export function getPlayerNameCandidates(player) {

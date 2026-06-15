@@ -1,5 +1,5 @@
 import { isSupabaseConfigured, supabase, supabaseConfigError } from '../lib/supabase'
-import { isDrawAllowedStage, isLeagueStage } from '../config/tournamentFormat.js'
+import { isDrawAllowedStage, isLeagueStage, tournamentFormat } from '../config/tournamentFormat.js'
 
 const viewerStorageKey = 'deir-hanna-world-cup-viewer-id'
 
@@ -43,8 +43,6 @@ function toPlayer(row) {
     nameHe: row.name_he || '',
     nameAr: row.name_ar || '',
     teamId: row.team_id,
-    number: row.number,
-    position: row.position,
     goals: row.goals ?? 0,
     assists: row.assists ?? 0,
     yellowCards: row.yellow_cards ?? 0,
@@ -60,10 +58,10 @@ function toMatch(row, eventsByMatch) {
     matchday: row.matchday ?? undefined,
     date: row.date,
     time: row.time,
-    venue: row.venue_en || row.venue,
-    venueEn: row.venue_en || row.venue,
-    venueHe: row.venue_he || '',
-    venueAr: row.venue_ar || '',
+    venue: tournamentFormat.fixedVenue,
+    venueEn: tournamentFormat.fixedVenue,
+    venueHe: tournamentFormat.fixedVenue,
+    venueAr: tournamentFormat.fixedVenue,
     homeTeamId: row.home_team_id ?? undefined,
     awayTeamId: row.away_team_id ?? undefined,
     homeLabel: row.home_label ?? undefined,
@@ -134,7 +132,7 @@ export async function loadTournamentData() {
     lineupPlayersResponse,
   ] = await Promise.all([
     client.from('teams').select('*').order('sort_order').order('country'),
-    client.from('players').select('*').order('team_id').order('number'),
+    client.from('players').select('*').order('team_id').order('name_en'),
     client.from('matches').select('*').order('date').order('time'),
     client.from('match_events').select('*').order('sort_order').order('minute'),
     client.from('lineups').select('*'),
@@ -281,8 +279,6 @@ export async function savePlayer(player) {
     name_en: player.nameEn || player.name,
     name_he: player.nameHe || '',
     name_ar: player.nameAr || '',
-    number: player.number,
-    position: player.position,
     goals: player.goals ?? 0,
     assists: player.assists ?? 0,
     yellow_cards: player.yellowCards ?? 0,
@@ -308,10 +304,10 @@ export async function saveMatch(match) {
     matchday: match.matchday ?? null,
     date: match.date,
     time: match.time,
-    venue: match.venueEn || match.venue,
-    venue_en: match.venueEn || match.venue,
-    venue_he: match.venueHe || '',
-    venue_ar: match.venueAr || '',
+    venue: tournamentFormat.fixedVenue,
+    venue_en: tournamentFormat.fixedVenue,
+    venue_he: tournamentFormat.fixedVenue,
+    venue_ar: tournamentFormat.fixedVenue,
     home_team_id: nullIfEmpty(match.homeTeamId),
     away_team_id: nullIfEmpty(match.awayTeamId),
     home_label: nullIfEmpty(match.homeLabel),
