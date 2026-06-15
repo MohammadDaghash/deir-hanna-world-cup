@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "seed:sql": "node scripts/generate-supabase-seed.mjs"
+    "seed:sql": "node scripts/generate-supabase-seed.mjs",
+    "verify:real-data": "node scripts/verify-real-data-mode.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",

@@ -24,7 +24,10 @@ function nullIfEmpty(value) {
 function toTeam(row) {
   return {
     id: row.id,
-    country: row.country,
+    country: row.country_en || row.country,
+    countryEn: row.country_en || row.country,
+    countryHe: row.country_he || '',
+    countryAr: row.country_ar || '',
     code: row.code,
     group: row.group_code,
     color: row.color,
@@ -35,7 +38,10 @@ function toTeam(row) {
 function toPlayer(row) {
   return {
     id: row.id,
-    name: row.name,
+    name: row.name_en || row.name,
+    nameEn: row.name_en || row.name,
+    nameHe: row.name_he || '',
+    nameAr: row.name_ar || '',
     teamId: row.team_id,
     number: row.number,
     position: row.position,
@@ -54,7 +60,10 @@ function toMatch(row, eventsByMatch) {
     matchday: row.matchday ?? undefined,
     date: row.date,
     time: row.time,
-    venue: row.venue,
+    venue: row.venue_en || row.venue,
+    venueEn: row.venue_en || row.venue,
+    venueHe: row.venue_he || '',
+    venueAr: row.venue_ar || '',
     homeTeamId: row.home_team_id ?? undefined,
     awayTeamId: row.away_team_id ?? undefined,
     homeLabel: row.home_label ?? undefined,
@@ -243,7 +252,10 @@ export async function saveTeam(team) {
   const client = requireSupabase()
   const { error } = await client.from('teams').upsert({
     id: team.id,
-    country: team.country,
+    country: team.countryEn || team.country,
+    country_en: team.countryEn || team.country,
+    country_he: team.countryHe || '',
+    country_ar: team.countryAr || '',
     code: team.code,
     group_code: team.group,
     color: team.color,
@@ -253,12 +265,22 @@ export async function saveTeam(team) {
   throwIfError(error)
 }
 
+export async function deleteTeam(teamId) {
+  const client = requireSupabase()
+  const { error } = await client.from('teams').delete().eq('id', teamId)
+
+  throwIfError(error)
+}
+
 export async function savePlayer(player) {
   const client = requireSupabase()
   const { error } = await client.from('players').upsert({
     id: player.id,
     team_id: player.teamId,
-    name: player.name,
+    name: player.nameEn || player.name,
+    name_en: player.nameEn || player.name,
+    name_he: player.nameHe || '',
+    name_ar: player.nameAr || '',
     number: player.number,
     position: player.position,
     goals: player.goals ?? 0,
@@ -266,6 +288,13 @@ export async function savePlayer(player) {
     yellow_cards: player.yellowCards ?? 0,
     red_cards: player.redCards ?? 0,
   })
+
+  throwIfError(error)
+}
+
+export async function deletePlayer(playerId) {
+  const client = requireSupabase()
+  const { error } = await client.from('players').delete().eq('id', playerId)
 
   throwIfError(error)
 }
@@ -279,7 +308,10 @@ export async function saveMatch(match) {
     matchday: match.matchday ?? null,
     date: match.date,
     time: match.time,
-    venue: match.venue,
+    venue: match.venueEn || match.venue,
+    venue_en: match.venueEn || match.venue,
+    venue_he: match.venueHe || '',
+    venue_ar: match.venueAr || '',
     home_team_id: nullIfEmpty(match.homeTeamId),
     away_team_id: nullIfEmpty(match.awayTeamId),
     home_label: nullIfEmpty(match.homeLabel),
@@ -289,6 +321,13 @@ export async function saveMatch(match) {
     status: match.status,
     minute: match.minute ?? null,
   })
+
+  throwIfError(error)
+}
+
+export async function deleteMatch(matchId) {
+  const client = requireSupabase()
+  const { error } = await client.from('matches').delete().eq('id', matchId)
 
   throwIfError(error)
 }

@@ -5,16 +5,17 @@ React + Vite starter for the Deir Hanna local World Cup tournament app.
 ## Included
 
 - Mobile-first public dashboard
-- 12 seeded country teams across 4 groups
-- Clickable team cards with detail popups and squad tab
+- Real tournament data entered manually by admins
+- Clickable team cards with squad and detail pages
 - 10-player squad limit with 7 starters and 3 bench players
 - Clickable player cards with goals, assists, history, and next games
-- Automatic group table calculation
+- English, Hebrew, and Arabic manual names for teams and players
+- Automatic league table calculation
 - Match schedule with final, live, and scheduled states
 - Clickable match rows with scorers, assists, final score, time, and lineups
 - Player leaderboards for goals, assists, and goal contributions
-- Centered single-game knockout path with quarter-finals, semi-finals, and final
-- Supabase-backed admin panel for adding teams, adding players, adding matches, editing match details/scores, and updating scorer/assist events
+- Single-game knockout path with semi-finals, third-place match, and final
+- Supabase-backed admin panel for adding, editing, and deleting teams, players, and matches
 - Supabase-backed prediction voting with one browser vote per match
 
 ## Scripts
@@ -25,6 +26,7 @@ npm run dev
 npm run build
 npm run lint
 npm run seed:sql
+node scripts/verify-real-data-mode.mjs
 ```
 
 ## Supabase Setup
@@ -34,6 +36,7 @@ npm run seed:sql
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
 3. Run `supabase/schema.sql` in the Supabase SQL editor.
+   - For an existing demo database, run `supabase/migrations/20260614_prepare_real_data_mode.sql` once. It adds multilingual columns and clears tournament demo rows while preserving `admin_users`.
 4. Add your admin email:
 
 ```sql
@@ -41,7 +44,7 @@ insert into public.admin_users (email)
 values ('your-email@example.com');
 ```
 
-5. Generate seed SQL and run the output in the Supabase SQL editor:
+5. Optional: generate cleanup seed SQL. In real-data mode this clears tournament rows and leaves the app ready for manual admin entry:
 
 ```bash
 npm --silent run seed:sql > /tmp/deir-hanna-seed.sql
@@ -51,6 +54,7 @@ Admin access uses Supabase magic-link email login. Public viewers do not need ac
 
 ## Next Steps
 
-- Replace seed data in `src/data/tournament.js` with the real teams, players, and fixtures.
-- Deploy after Supabase env vars and database seed are configured.
+- Add real teams, players, fixtures, scores, and venues from the Admin page.
+- Enter English, Hebrew, and Arabic names manually. The app does not auto-translate names.
+- Deploy after Supabase env vars and database schema are configured.
 - Add PWA support before sharing by QR code.

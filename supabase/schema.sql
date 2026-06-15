@@ -8,6 +8,9 @@ create table if not exists public.admin_users (
 create table if not exists public.teams (
   id text primary key,
   country text not null,
+  country_en text not null default '',
+  country_he text not null default '',
+  country_ar text not null default '',
   code text not null,
   group_code text not null,
   color text not null default '#1f6d4d',
@@ -21,6 +24,9 @@ create table if not exists public.players (
   id text primary key,
   team_id text not null references public.teams(id) on delete cascade,
   name text not null,
+  name_en text not null default '',
+  name_he text not null default '',
+  name_ar text not null default '',
   number int not null,
   position text not null,
   goals int not null default 0,
@@ -40,6 +46,9 @@ create table if not exists public.matches (
   date date not null,
   time text not null,
   venue text not null,
+  venue_en text not null default '',
+  venue_he text not null default '',
+  venue_ar text not null default '',
   home_team_id text references public.teams(id) on delete set null,
   away_team_id text references public.teams(id) on delete set null,
   home_label text,
@@ -119,6 +128,30 @@ create table if not exists public.player_match_stats (
   updated_at timestamptz not null default now(),
   primary key (player_id, match_id)
 );
+
+alter table public.teams add column if not exists country_en text not null default '';
+alter table public.teams add column if not exists country_he text not null default '';
+alter table public.teams add column if not exists country_ar text not null default '';
+update public.teams
+set country_en = coalesce(nullif(country_en, ''), country),
+    country_he = coalesce(country_he, ''),
+    country_ar = coalesce(country_ar, '');
+
+alter table public.players add column if not exists name_en text not null default '';
+alter table public.players add column if not exists name_he text not null default '';
+alter table public.players add column if not exists name_ar text not null default '';
+update public.players
+set name_en = coalesce(nullif(name_en, ''), name),
+    name_he = coalesce(name_he, ''),
+    name_ar = coalesce(name_ar, '');
+
+alter table public.matches add column if not exists venue_en text not null default '';
+alter table public.matches add column if not exists venue_he text not null default '';
+alter table public.matches add column if not exists venue_ar text not null default '';
+update public.matches
+set venue_en = coalesce(nullif(venue_en, ''), venue),
+    venue_he = coalesce(venue_he, ''),
+    venue_ar = coalesce(venue_ar, '');
 
 create or replace function public.is_admin()
 returns boolean

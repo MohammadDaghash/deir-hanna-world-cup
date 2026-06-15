@@ -22,6 +22,10 @@ function sqlList(values) {
   return values.map(sqlString).join(', ')
 }
 
+function sqlNotInOrAll(column, ids) {
+  return ids.length ? `${column} not in (${sqlList(ids)})` : 'true'
+}
+
 function values(rows) {
   return rows.join(',\n')
 }
@@ -37,31 +41,40 @@ console.log('begin;')
 
 console.log(`
 -- Remove stale demo records when the tournament format changes.
-delete from public.match_votes where match_id not in (${sqlList(matchIds)});
-delete from public.player_match_stats where match_id not in (${sqlList(matchIds)}) or player_id not in (${sqlList(playerIds)});
-delete from public.match_events where match_id not in (${sqlList(matchIds)});
+delete from public.match_votes where ${sqlNotInOrAll('match_id', matchIds)};
+delete from public.player_match_stats where ${sqlNotInOrAll('match_id', matchIds)} or ${sqlNotInOrAll('player_id', playerIds)};
+delete from public.match_events where ${sqlNotInOrAll('match_id', matchIds)};
 delete from public.lineup_players
-where lineup_id in (select id from public.lineups where match_id not in (${sqlList(matchIds)}));
-delete from public.lineups where match_id not in (${sqlList(matchIds)});
-delete from public.matches where id not in (${sqlList(matchIds)});
+where lineup_id in (select id from public.lineups where ${sqlNotInOrAll('match_id', matchIds)});
+delete from public.lineups where ${sqlNotInOrAll('match_id', matchIds)};
+delete from public.matches where ${sqlNotInOrAll('id', matchIds)};
 delete from public.tournament_votes
-where (vote_type = 'tournament_winner' and candidate_id not in (${sqlList(teamIds)}))
-   or (vote_type in ('top_scorer', 'best_player') and candidate_id not in (${sqlList(playerIds)}));
-delete from public.players where id not in (${sqlList(playerIds)});
-delete from public.teams where id not in (${sqlList(teamIds)});
+where (vote_type = 'tournament_winner' and ${sqlNotInOrAll('candidate_id', teamIds)})
+   or (vote_type in ('top_scorer', 'best_player') and ${sqlNotInOrAll('candidate_id', playerIds)});
+delete from public.players where ${sqlNotInOrAll('id', playerIds)};
+delete from public.teams where ${sqlNotInOrAll('id', teamIds)};
 `)
 
+if (!teams.length && !players.length && !allMatches.length) {
+  console.log('-- No seed rows configured. Database is ready for manual admin entry.')
+  console.log('commit;')
+  process.exit(0)
+}
+
 console.log(`
-insert into public.teams (id, country, code, group_code, color, secondary, sort_order)
+insert into public.teams (id, country, country_en, country_he, country_ar, code, group_code, color, secondary, sort_order)
 values
 ${values(
   teams.map(
     (team, index) =>
-      `(${sqlString(team.id)}, ${sqlString(team.country)}, ${sqlString(team.code)}, ${sqlString(team.group)}, ${sqlString(team.color)}, ${sqlString(team.secondary)}, ${index})`,
+      `(${sqlString(team.id)}, ${sqlString(team.countryEn ?? team.country)}, ${sqlString(team.countryEn ?? team.country)}, ${sqlString(team.countryHe)}, ${sqlString(team.countryAr)}, ${sqlString(team.code)}, ${sqlString(team.group)}, ${sqlString(team.color)}, ${sqlString(team.secondary)}, ${index})`,
   ),
 )}
 on conflict (id) do update set
   country = excluded.country,
+  country_en = excluded.country_en,
+  country_he = excluded.country_he,
+  country_ar = excluded.country_ar,
   code = excluded.code,
   group_code = excluded.group_code,
   color = excluded.color,
@@ -70,17 +83,20 @@ on conflict (id) do update set
 `)
 
 console.log(`
-insert into public.players (id, team_id, name, number, position, goals, assists, yellow_cards, red_cards)
+insert into public.players (id, team_id, name, name_en, name_he, name_ar, number, position, goals, assists, yellow_cards, red_cards)
 values
 ${values(
   players.map(
     (player) =>
-      `(${sqlString(player.id)}, ${sqlString(player.teamId)}, ${sqlString(player.name)}, ${sqlNumber(player.number)}, ${sqlString(player.position)}, ${sqlNumber(player.goals)}, ${sqlNumber(player.assists)}, ${sqlNumber(player.yellowCards)}, ${sqlNumber(player.redCards)})`,
+      `(${sqlString(player.id)}, ${sqlString(player.teamId)}, ${sqlString(player.nameEn ?? player.name)}, ${sqlString(player.nameEn ?? player.name)}, ${sqlString(player.nameHe)}, ${sqlString(player.nameAr)}, ${sqlNumber(player.number)}, ${sqlString(player.position)}, ${sqlNumber(player.goals)}, ${sqlNumber(player.assists)}, ${sqlNumber(player.yellowCards)}, ${sqlNumber(player.redCards)})`,
   ),
 )}
 on conflict (id) do update set
   team_id = excluded.team_id,
   name = excluded.name,
+  name_en = excluded.name_en,
+  name_he = excluded.name_he,
+  name_ar = excluded.name_ar,
   number = excluded.number,
   position = excluded.position,
   goals = excluded.goals,
@@ -91,7 +107,7 @@ on conflict (id) do update set
 
 console.log(`
 insert into public.matches (
-  id, stage, group_code, matchday, date, time, venue,
+  id, stage, group_code, matchday, date, time, venue, venue_en, venue_he, venue_ar,
   home_team_id, away_team_id, home_label, away_label,
   home_score, away_score, status, minute
 )
@@ -99,7 +115,7 @@ values
 ${values(
   allMatches.map(
     (match) =>
-      `(${sqlString(match.id)}, ${sqlString(match.stage)}, ${sqlString(match.group)}, ${sqlNumber(match.matchday)}, ${sqlString(match.date)}, ${sqlString(match.time)}, ${sqlString(match.venue)}, ${sqlString(match.homeTeamId)}, ${sqlString(match.awayTeamId)}, ${sqlString(match.homeLabel)}, ${sqlString(match.awayLabel)}, ${sqlNumber(match.homeScore)}, ${sqlNumber(match.awayScore)}, ${sqlString(match.status)}, ${sqlNumber(match.minute)})`,
+      `(${sqlString(match.id)}, ${sqlString(match.stage)}, ${sqlString(match.group)}, ${sqlNumber(match.matchday)}, ${sqlString(match.date)}, ${sqlString(match.time)}, ${sqlString(match.venueEn ?? match.venue)}, ${sqlString(match.venueEn ?? match.venue)}, ${sqlString(match.venueHe)}, ${sqlString(match.venueAr)}, ${sqlString(match.homeTeamId)}, ${sqlString(match.awayTeamId)}, ${sqlString(match.homeLabel)}, ${sqlString(match.awayLabel)}, ${sqlNumber(match.homeScore)}, ${sqlNumber(match.awayScore)}, ${sqlString(match.status)}, ${sqlNumber(match.minute)})`,
   ),
 )}
 on conflict (id) do update set
@@ -109,6 +125,9 @@ on conflict (id) do update set
   date = excluded.date,
   time = excluded.time,
   venue = excluded.venue,
+  venue_en = excluded.venue_en,
+  venue_he = excluded.venue_he,
+  venue_ar = excluded.venue_ar,
   home_team_id = excluded.home_team_id,
   away_team_id = excluded.away_team_id,
   home_label = excluded.home_label,

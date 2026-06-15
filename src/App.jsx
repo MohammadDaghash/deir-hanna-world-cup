@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Clock,
   Expand,
+  Languages,
   Goal,
   LockKeyhole,
   Medal,
@@ -23,6 +24,7 @@ import {
   Table2,
   Timer,
   Trophy,
+  Trash2,
   UserRound,
   Users,
   X,
@@ -34,6 +36,9 @@ import {
   supabaseConfigError,
 } from './lib/supabase'
 import {
+  deleteMatch,
+  deletePlayer,
+  deleteTeam,
   deleteLineups,
   getCurrentSession,
   loadAdminAccess,
@@ -51,6 +56,14 @@ import {
   signInAdmin,
   signOutAdmin,
 } from './services/tournamentService'
+import {
+  getLanguageDirection,
+  getPlayerNameCandidates,
+  getStoredLanguage,
+  languageOptions,
+  localizeTournamentData,
+  storeLanguage,
+} from './utils/localization'
 import {
   calculateStandings,
   getLeaderboards,
@@ -311,14 +324,16 @@ function getPlayerTeam(player, teams) {
 }
 
 function getPlayerContributions(player, allMatches) {
+  const playerNames = getPlayerNameCandidates(player)
+
   return allMatches
     .flatMap((match) =>
       (match.events ?? [])
-        .filter((event) => event.player === player.name || event.assist === player.name)
+        .filter((event) => playerNames.includes(event.player) || playerNames.includes(event.assist))
         .map((event) => ({
           ...event,
           match,
-          contribution: event.player === player.name ? 'Goal' : 'Assist',
+          contribution: playerNames.includes(event.player) ? 'Goal' : 'Assist',
         })),
     )
     .sort((a, b) => `${b.match.date} ${b.minute}`.localeCompare(`${a.match.date} ${a.minute}`))
@@ -342,6 +357,7 @@ function getCandidateVoteData(tournamentVotes, voteType, candidateId) {
 
 function App() {
   const [tournamentData, setTournamentData] = useState(emptyTournamentData)
+  const [language, setLanguage] = useState(() => getStoredLanguage())
   const [votes, setVotes] = useState({})
   const [tournamentVotes, setTournamentVotes] = useState({})
   const [route, setRoute] = useState(() => parseHashRoute())
@@ -351,7 +367,11 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [appError, setAppError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
-  const { teams, players, matches, knockoutMatches, lineups } = tournamentData
+  const displayTournamentData = useMemo(
+    () => localizeTournamentData(tournamentData, language),
+    [language, tournamentData],
+  )
+  const { teams, players, matches, knockoutMatches, lineups } = displayTournamentData
   const allMatches = useMemo(
     () => [...matches, ...knockoutMatches],
     [knockoutMatches, matches],
@@ -378,6 +398,12 @@ function App() {
         .slice(0, 3),
     [allMatches],
   )
+  const languageDirection = getLanguageDirection(language)
+
+  function handleLanguageChange(nextLanguage) {
+    setLanguage(nextLanguage)
+    storeLanguage(nextLanguage)
+  }
 
   const reloadTournament = useCallback(async ({ silent = false } = {}) => {
     if (!isSupabaseConfigured) {
@@ -515,19 +541,42 @@ function App() {
   async function handleAddTeam(teamDraft) {
     const id = makeUniqueId(
       'team',
-      teamDraft.code || teamDraft.country,
+      teamDraft.code || teamDraft.countryEn,
       new Set(teams.map((team) => team.id)),
     )
 
     await runMutation(async () => {
       await saveTeam({
         id,
-        country: teamDraft.country.trim(),
+        country: teamDraft.countryEn.trim(),
+        countryEn: teamDraft.countryEn.trim(),
+        countryHe: teamDraft.countryHe.trim(),
+        countryAr: teamDraft.countryAr.trim(),
         code: teamDraft.code.trim().toUpperCase(),
         group: tournamentFormat.tableKey,
         color: teamDraft.color,
         secondary: teamDraft.secondary,
       })
+    })
+  }
+
+  async function handleSaveTeam(teamDraft) {
+    await runMutation(async () => {
+      await saveTeam({
+        ...teamDraft,
+        country: teamDraft.countryEn.trim(),
+        countryEn: teamDraft.countryEn.trim(),
+        countryHe: teamDraft.countryHe.trim(),
+        countryAr: teamDraft.countryAr.trim(),
+        code: teamDraft.code.trim().toUpperCase(),
+        group: tournamentFormat.tableKey,
+      })
+    })
+  }
+
+  async function handleDeleteTeam(teamId) {
+    await runMutation(async () => {
+      await deleteTeam(teamId)
     })
   }
 
@@ -542,12 +591,15 @@ function App() {
 
     const id = makeUniqueId(
       'p',
-      `${playerDraft.teamId}-${playerDraft.name}`,
+      `${playerDraft.teamId}-${playerDraft.nameEn}`,
       new Set(players.map((player) => player.id)),
     )
     const player = {
       id,
-      name: playerDraft.name.trim(),
+      name: playerDraft.nameEn.trim(),
+      nameEn: playerDraft.nameEn.trim(),
+      nameHe: playerDraft.nameHe.trim(),
+      nameAr: playerDraft.nameAr.trim(),
       teamId: playerDraft.teamId,
       number: Number(playerDraft.number),
       position: playerDraft.position,
@@ -583,6 +635,25 @@ function App() {
     })
   }
 
+  async function handleSavePlayer(playerDraft) {
+    await runMutation(async () => {
+      await savePlayer({
+        ...playerDraft,
+        name: playerDraft.nameEn.trim(),
+        nameEn: playerDraft.nameEn.trim(),
+        nameHe: playerDraft.nameHe.trim(),
+        nameAr: playerDraft.nameAr.trim(),
+        number: Number(playerDraft.number),
+      })
+    })
+  }
+
+  async function handleDeletePlayer(playerId) {
+    await runMutation(async () => {
+      await deletePlayer(playerId)
+    })
+  }
+
   function normalizeMatchDraft(matchDraft) {
     return {
       ...matchDraft,
@@ -590,6 +661,10 @@ function App() {
       matchday: Number(matchDraft.matchday),
       homeTeamId: matchDraft.homeTeamId || undefined,
       awayTeamId: matchDraft.awayTeamId || undefined,
+      venue: matchDraft.venueEn?.trim() || matchDraft.venue?.trim() || '',
+      venueEn: matchDraft.venueEn?.trim() || matchDraft.venue?.trim() || '',
+      venueHe: matchDraft.venueHe?.trim() || '',
+      venueAr: matchDraft.venueAr?.trim() || '',
       homeScore: normalizeScore(matchDraft.homeScore),
       awayScore: normalizeScore(matchDraft.awayScore),
       minute: matchDraft.minute === '' ? undefined : Number(matchDraft.minute),
@@ -632,12 +707,17 @@ function App() {
     const match = normalizeMatchDraft({
       ...matchDraft,
       id,
-      venue: matchDraft.venue.trim(),
       events: [],
     })
 
     await runMutation(async () => {
       await saveMatchAndLineups(match)
+    })
+  }
+
+  async function handleDeleteMatch(matchId) {
+    await runMutation(async () => {
+      await deleteMatch(matchId)
     })
   }
 
@@ -678,18 +758,7 @@ function App() {
     return <LoadingState />
   }
 
-  if (appError && (!teams.length || !allMatches.length)) {
-    return <SetupState detail={appError} title="Could not load tournament data" />
-  }
-
-  if (!teams.length || !allMatches.length) {
-    return (
-      <SetupState
-        detail="Run supabase/schema.sql in Supabase, generate seed SQL with npm run seed:sql, then run that output in the Supabase SQL editor."
-        title="No tournament data found"
-      />
-    )
-  }
+  const hasTournamentData = teams.length > 0 || allMatches.length > 0
 
   const routeMatch = route.type === 'match'
     ? allMatches.find((match) => match.id === route.id)
@@ -703,10 +772,15 @@ function App() {
   const isDetailRoute = route.type !== 'main'
 
   return (
-    <main className="min-h-screen bg-[#f6f7f2] text-[#14201b]">
-      <Header activeView={activeView} onViewSelect={handleViewSelect} />
+    <main className="min-h-screen bg-[#f6f7f2] text-[#14201b]" dir={languageDirection}>
+      <Header
+        activeView={activeView}
+        language={language}
+        onLanguageChange={handleLanguageChange}
+        onViewSelect={handleViewSelect}
+      />
 
-      {!isDetailRoute && activeView !== 'admin' && (
+      {hasTournamentData && !isDetailRoute && activeView !== 'admin' && (
         <TournamentHeader
           allMatches={allMatches}
           liveMatch={liveMatch}
@@ -717,6 +791,9 @@ function App() {
 
       <section className="mx-auto w-full max-w-7xl min-w-0 px-4 py-6 sm:px-6 lg:px-8">
         {appError && <ErrorBanner message={appError} onDismiss={() => setAppError('')} />}
+        {!hasTournamentData && !isDetailRoute && activeView !== 'admin' && (
+          <EmptyTournamentPanel onAdmin={() => handleViewSelect('admin')} />
+        )}
         {route.type === 'match' && routeMatch && (
           <MatchCenterPage
             allMatches={allMatches}
@@ -756,7 +833,7 @@ function App() {
         {isDetailRoute && !routeMatch && !routeTeam && !routePlayer && (
           <NotFoundPanel onBack={() => handleViewSelect('overview')} />
         )}
-        {!isDetailRoute && activeView === 'overview' && (
+        {hasTournamentData && !isDetailRoute && activeView === 'overview' && (
           <Overview
             allMatches={allMatches}
             knockoutMatches={knockoutMatches}
@@ -778,14 +855,14 @@ function App() {
             votes={votes}
           />
         )}
-        {!isDetailRoute && activeView === 'teams' && (
+        {hasTournamentData && !isDetailRoute && activeView === 'teams' && (
           <TeamsBoard
             onTeamSelect={openTeam}
             playersByTeam={playersByTeam}
             teams={teams}
           />
         )}
-        {!isDetailRoute && activeView === 'matches' && (
+        {hasTournamentData && !isDetailRoute && activeView === 'matches' && (
           <MatchesBoard
             lineups={lineups}
             matches={allMatches}
@@ -796,13 +873,13 @@ function App() {
             votes={votes}
           />
         )}
-        {!isDetailRoute && activeView === 'tables' && (
+        {hasTournamentData && !isDetailRoute && activeView === 'tables' && (
           <TablesBoard standings={standings} />
         )}
-        {!isDetailRoute && activeView === 'knockout' && (
+        {hasTournamentData && !isDetailRoute && activeView === 'knockout' && (
           <KnockoutBoard matches={knockoutMatches} onMatchSelect={openMatch} teams={teams} />
         )}
-        {!isDetailRoute && activeView === 'leaders' && (
+        {hasTournamentData && !isDetailRoute && activeView === 'leaders' && (
           <LeadersBoard leaderboards={leaderboards} onPlayerSelect={openPlayer} />
         )}
         {!isDetailRoute && activeView === 'admin' && (
@@ -814,7 +891,12 @@ function App() {
             onAddMatch={handleAddMatch}
             onAddPlayer={handleAddPlayer}
             onAddTeam={handleAddTeam}
+            onDeleteMatch={handleDeleteMatch}
+            onDeletePlayer={handleDeletePlayer}
+            onDeleteTeam={handleDeleteTeam}
             onSaveMatch={handleSaveMatch}
+            onSavePlayer={handleSavePlayer}
+            onSaveTeam={handleSaveTeam}
             onSignIn={handleSignIn}
             onSignOut={handleSignOut}
             players={players}
@@ -826,7 +908,7 @@ function App() {
   )
 }
 
-function Header({ activeView, onViewSelect }) {
+function Header({ activeView, language, onLanguageChange, onViewSelect }) {
   return (
     <header className="sticky top-0 z-20 border-b border-[#dce1d7] bg-[#f6f7f2]/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
@@ -841,30 +923,74 @@ function Header({ activeView, onViewSelect }) {
             <p className="truncate text-xs text-[#65756b]">Local tournament dashboard</p>
           </div>
         </div>
-        <nav className="scrollbar-none -mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:pb-0" aria-label="Main views">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = activeView === item.id
+        <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center">
+          <LanguageSelector language={language} onChange={onLanguageChange} />
+          <nav className="scrollbar-none -mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:pb-0" aria-label="Main views">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = activeView === item.id
 
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`relative inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold transition ${
-                  isActive
-                    ? 'bg-white text-[#14201b] shadow-sm after:absolute after:inset-x-3 after:-bottom-1 after:h-0.5 after:rounded-full after:bg-[#163428]'
-                    : 'text-[#65756b] hover:bg-white hover:text-[#14201b]'
-                }`}
-                onClick={() => onViewSelect(item.id)}
-              >
-                <Icon className="h-4 w-4" />
-                {item.label}
-              </button>
-            )
-          })}
-        </nav>
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`relative inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold transition ${
+                    isActive
+                      ? 'bg-white text-[#14201b] shadow-sm after:absolute after:inset-x-3 after:-bottom-1 after:h-0.5 after:rounded-full after:bg-[#163428]'
+                      : 'text-[#65756b] hover:bg-white hover:text-[#14201b]'
+                  }`}
+                  onClick={() => onViewSelect(item.id)}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </button>
+              )
+            })}
+          </nav>
+        </div>
       </div>
     </header>
+  )
+}
+
+function LanguageSelector({ language, onChange }) {
+  return (
+    <label className="flex shrink-0 items-center gap-2 rounded-md border border-[#dce1d7] bg-white px-2 py-1 text-xs font-semibold text-[#34433a] shadow-sm">
+      <Languages className="h-4 w-4 text-[#65756b]" />
+      <select
+        className="min-h-9 bg-transparent text-sm font-semibold outline-none"
+        onChange={(event) => onChange(event.target.value)}
+        value={language}
+      >
+        {languageOptions.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.shortLabel}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+function EmptyTournamentPanel({ onAdmin }) {
+  return (
+    <section className="rounded-lg border border-[#dce1d7] bg-white p-5 shadow-sm">
+      <div className="mb-4 grid h-11 w-11 place-items-center rounded-lg bg-[#eef3e9] text-[#1f6d4d]">
+        <ShieldCheck className="h-5 w-5" />
+      </div>
+      <h1 className="text-xl font-semibold text-[#14201b]">Ready for real tournament data</h1>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-[#65756b]">
+        Demo teams, players, fixtures, and fake stats are no longer used. Sign in as admin to add the real teams, squads, venues, and match timeline manually.
+      </p>
+      <button
+        type="button"
+        className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-md bg-[#163428] px-4 text-sm font-semibold text-white"
+        onClick={onAdmin}
+      >
+        <LockKeyhole className="h-4 w-4" />
+        Open admin
+      </button>
+    </section>
   )
 }
 
@@ -959,7 +1085,7 @@ function SetupState({ detail, title }) {
         <p className="mt-3 text-sm leading-6 text-[#65756b]">{detail}</p>
         <div className="mt-5 rounded-md bg-[#f8faf5] p-4 text-sm text-[#34433a]">
           Required setup: create the Supabase project, run `supabase/schema.sql`, add your
-          admin email to `admin_users`, then seed the database.
+          admin email to `admin_users`, then enter real tournament data from the Admin page.
         </div>
       </section>
     </main>
@@ -3194,15 +3320,16 @@ function PlayerPage({ allMatches, onBack, onMatchSelect, onTeamSelect, player, t
   const team = getPlayerTeam(player, teams)
   const contributions = getPlayerContributions(player, allMatches)
   const playerMatches = getTeamMatches(allMatches, player.teamId)
+  const playerNames = getPlayerNameCandidates(player)
   const chartRows = playerMatches.slice(-6).map((match) => {
     const matchEvents = (match.events ?? []).filter(
-      (event) => event.player === player.name || event.assist === player.name,
+      (event) => playerNames.includes(event.player) || playerNames.includes(event.assist),
     )
 
     return {
       label: formatDate(match.date),
-      goals: matchEvents.filter((event) => event.player === player.name).length,
-      assists: matchEvents.filter((event) => event.assist === player.name).length,
+      goals: matchEvents.filter((event) => playerNames.includes(event.player)).length,
+      assists: matchEvents.filter((event) => playerNames.includes(event.assist)).length,
     }
   })
 
@@ -3401,7 +3528,10 @@ function createNewMatchDraft(teams) {
     matchday: 1,
     date: '2026-06-20',
     time: '19:30',
-    venue: 'Deir Hanna Stadium',
+    venue: '',
+    venueEn: '',
+    venueHe: '',
+    venueAr: '',
     homeTeamId: teams[0]?.id ?? '',
     awayTeamId: teams[1]?.id ?? '',
     homeScore: '',
@@ -3432,6 +3562,9 @@ function matchToAdminDraft(match) {
     homeScore: match.homeScore ?? '',
     awayScore: match.awayScore ?? '',
     minute: match.minute ?? '',
+    venueEn: match.venueEn ?? match.venue ?? '',
+    venueHe: match.venueHe ?? '',
+    venueAr: match.venueAr ?? '',
   }
 }
 
@@ -3443,7 +3576,12 @@ function AdminBoard({
   onAddMatch,
   onAddPlayer,
   onAddTeam,
+  onDeleteMatch,
+  onDeletePlayer,
+  onDeleteTeam,
   onSaveMatch,
+  onSavePlayer,
+  onSaveTeam,
   onSignIn,
   onSignOut,
   players,
@@ -3451,7 +3589,9 @@ function AdminBoard({
 }) {
   const [adminEmailDraft, setAdminEmailDraft] = useState('')
   const [teamDraft, setTeamDraft] = useState({
-    country: '',
+    countryEn: '',
+    countryHe: '',
+    countryAr: '',
     code: '',
     group: tournamentFormat.tableKey,
     color: '#1f6d4d',
@@ -3459,7 +3599,9 @@ function AdminBoard({
   })
   const [playerDraft, setPlayerDraft] = useState({
     teamId: teams[0]?.id ?? '',
-    name: '',
+    nameEn: '',
+    nameHe: '',
+    nameAr: '',
     number: 13,
     position: 'MF',
   })
@@ -3505,25 +3647,27 @@ function AdminBoard({
   async function submitTeam(event) {
     event.preventDefault()
 
-    if (!teamDraft.country.trim() || !teamDraft.code.trim()) {
+    if (!teamDraft.countryEn.trim() || !teamDraft.countryHe.trim() || !teamDraft.countryAr.trim() || !teamDraft.code.trim()) {
       return
     }
 
     await onAddTeam(teamDraft)
-    setTeamDraft((draft) => ({ ...draft, country: '', code: '' }))
+    setTeamDraft((draft) => ({ ...draft, countryEn: '', countryHe: '', countryAr: '', code: '' }))
   }
 
   async function submitPlayer(event) {
     event.preventDefault()
 
-    if (!playerDraft.name.trim() || !effectivePlayerTeamId) {
+    if (!playerDraft.nameEn.trim() || !playerDraft.nameHe.trim() || !playerDraft.nameAr.trim() || !effectivePlayerTeamId) {
       return
     }
 
     await onAddPlayer({ ...playerDraft, teamId: effectivePlayerTeamId })
     setPlayerDraft((draft) => ({
       ...draft,
-      name: '',
+      nameEn: '',
+      nameHe: '',
+      nameAr: '',
       number: Number(draft.number) + 1,
     }))
   }
@@ -3607,6 +3751,7 @@ function AdminBoard({
             disabled={disabled}
             match={selectedMatch}
             matchOptions={matchOptions}
+            onDeleteMatch={onDeleteMatch}
             onSaveMatch={onSaveMatch}
             selectedMatchId={effectiveSelectedMatchId}
             setSelectedMatchId={setSelectedMatchId}
@@ -3621,10 +3766,24 @@ function AdminBoard({
           <form className="grid min-w-0 gap-4 border-t border-[#e5e9e0] p-4" onSubmit={submitTeam}>
             <AdminTextInput
               disabled={disabled}
-              label="Team name"
-              onChange={(value) => setTeamDraft((draft) => ({ ...draft, country: value }))}
-              placeholder="Country or team"
-              value={teamDraft.country}
+              label="Team name - English"
+              onChange={(value) => setTeamDraft((draft) => ({ ...draft, countryEn: value }))}
+              placeholder="Team name"
+              value={teamDraft.countryEn}
+            />
+            <AdminTextInput
+              disabled={disabled}
+              label="Team name - Hebrew"
+              onChange={(value) => setTeamDraft((draft) => ({ ...draft, countryHe: value }))}
+              placeholder="שם הקבוצה"
+              value={teamDraft.countryHe}
+            />
+            <AdminTextInput
+              disabled={disabled}
+              label="Team name - Arabic"
+              onChange={(value) => setTeamDraft((draft) => ({ ...draft, countryAr: value }))}
+              placeholder="اسم الفريق"
+              value={teamDraft.countryAr}
             />
             <FieldGrid>
               <AdminTextInput
@@ -3672,10 +3831,24 @@ function AdminBoard({
             />
             <AdminTextInput
               disabled={disabled}
-              label="Player name"
-              onChange={(value) => setPlayerDraft((draft) => ({ ...draft, name: value }))}
+              label="Player name - English"
+              onChange={(value) => setPlayerDraft((draft) => ({ ...draft, nameEn: value }))}
               placeholder="Player name"
-              value={playerDraft.name}
+              value={playerDraft.nameEn}
+            />
+            <AdminTextInput
+              disabled={disabled}
+              label="Player name - Hebrew"
+              onChange={(value) => setPlayerDraft((draft) => ({ ...draft, nameHe: value }))}
+              placeholder="שם השחקן"
+              value={playerDraft.nameHe}
+            />
+            <AdminTextInput
+              disabled={disabled}
+              label="Player name - Arabic"
+              onChange={(value) => setPlayerDraft((draft) => ({ ...draft, nameAr: value }))}
+              placeholder="اسم اللاعب"
+              value={playerDraft.nameAr}
             />
             <FieldGrid>
               <AdminTextInput
@@ -3716,6 +3889,22 @@ function AdminBoard({
         </section>
       </div>
 
+      <div className="grid min-w-0 gap-6 lg:grid-cols-2">
+        <TeamManagementPanel
+          disabled={disabled}
+          onDeleteTeam={onDeleteTeam}
+          onSaveTeam={onSaveTeam}
+          teams={teams}
+        />
+        <PlayerManagementPanel
+          disabled={disabled}
+          onDeletePlayer={onDeletePlayer}
+          onSavePlayer={onSavePlayer}
+          players={players}
+          teamOptions={teamOptions}
+        />
+      </div>
+
       <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
         <PanelHeader icon={Smartphone} title="Version Roadmap" detail="MVP first" />
         <div className="grid min-w-0 gap-3 border-t border-[#e5e9e0] p-4 md:grid-cols-3">
@@ -3725,6 +3914,164 @@ function AdminBoard({
         </div>
       </section>
     </div>
+  )
+}
+
+function TeamManagementPanel({ disabled, onDeleteTeam, onSaveTeam, teams }) {
+  const [selectedTeamId, setSelectedTeamId] = useState(teams[0]?.id ?? '')
+  const effectiveSelectedTeamId = teams.some((team) => team.id === selectedTeamId)
+    ? selectedTeamId
+    : teams[0]?.id ?? ''
+  const selectedTeam = teams.find((team) => team.id === effectiveSelectedTeamId)
+
+  const teamOptions = teams.map((team) => ({
+    label: `${team.countryEn || team.country} (${team.code})`,
+    value: team.id,
+  }))
+
+  return (
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <PanelHeader icon={ShieldCheck} title="Manage Teams" detail="Edit or delete" />
+      <div className="grid min-w-0 gap-4 border-t border-[#e5e9e0] p-4">
+        {teams.length ? (
+          <>
+            <AdminSelect
+              disabled={disabled}
+              label="Team"
+              onChange={setSelectedTeamId}
+              options={teamOptions}
+              value={effectiveSelectedTeamId}
+            />
+            {selectedTeam && (
+              <TeamEditForm
+                disabled={disabled}
+                key={selectedTeam.id}
+                onDeleteTeam={onDeleteTeam}
+                onSaveTeam={onSaveTeam}
+                team={selectedTeam}
+              />
+            )}
+          </>
+        ) : (
+          <EmptyState text="No teams yet. Add the real tournament teams first." />
+        )}
+      </div>
+    </section>
+  )
+}
+
+function TeamEditForm({ disabled, onDeleteTeam, onSaveTeam, team }) {
+  const [draft, setDraft] = useState(team)
+
+  async function submitTeamEdit(event) {
+    event.preventDefault()
+
+    if (!draft.countryEn?.trim() || !draft.countryHe?.trim() || !draft.countryAr?.trim() || !draft.code?.trim()) {
+      return
+    }
+
+    await onSaveTeam(draft)
+  }
+
+  async function submitTeamDelete() {
+    if (window.confirm(`Delete ${draft.countryEn || draft.country}? This also removes its players.`)) {
+      await onDeleteTeam(draft.id)
+    }
+  }
+
+  return (
+    <form className="grid min-w-0 gap-4" onSubmit={submitTeamEdit}>
+      <AdminTextInput disabled={disabled} label="Team name - English" onChange={(value) => setDraft((current) => ({ ...current, countryEn: value }))} value={draft.countryEn ?? ''} />
+      <AdminTextInput disabled={disabled} label="Team name - Hebrew" onChange={(value) => setDraft((current) => ({ ...current, countryHe: value }))} value={draft.countryHe ?? ''} />
+      <AdminTextInput disabled={disabled} label="Team name - Arabic" onChange={(value) => setDraft((current) => ({ ...current, countryAr: value }))} value={draft.countryAr ?? ''} />
+      <FieldGrid>
+        <AdminTextInput disabled={disabled} label="Code" maxLength={3} onChange={(value) => setDraft((current) => ({ ...current, code: value }))} value={draft.code ?? ''} />
+        <AdminTextInput disabled label="Table" value={tournamentFormat.tableLabel} />
+      </FieldGrid>
+      <FieldGrid>
+        <AdminTextInput disabled={disabled} label="Primary" onChange={(value) => setDraft((current) => ({ ...current, color: value }))} type="color" value={draft.color ?? '#1f6d4d'} />
+        <AdminTextInput disabled={disabled} label="Secondary" onChange={(value) => setDraft((current) => ({ ...current, secondary: value }))} type="color" value={draft.secondary ?? '#eef3e9'} />
+      </FieldGrid>
+      <div className="flex flex-wrap gap-2">
+        <AdminSubmit disabled={disabled} icon={Save} label="Save team" />
+        <AdminDangerButton disabled={disabled} icon={Trash2} label="Delete team" onClick={submitTeamDelete} />
+      </div>
+    </form>
+  )
+}
+
+function PlayerManagementPanel({ disabled, onDeletePlayer, onSavePlayer, players, teamOptions }) {
+  const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.id ?? '')
+  const effectiveSelectedPlayerId = players.some((player) => player.id === selectedPlayerId)
+    ? selectedPlayerId
+    : players[0]?.id ?? ''
+  const selectedPlayer = players.find((player) => player.id === effectiveSelectedPlayerId)
+
+  const playerOptions = players.map((player) => ({
+    label: `${player.nameEn || player.name} #${player.number}`,
+    value: player.id,
+  }))
+
+  return (
+    <section className="min-w-0 rounded-lg border border-[#dce1d7] bg-white shadow-sm">
+      <PanelHeader icon={Users} title="Manage Players" detail="Edit or delete" />
+      <div className="grid min-w-0 gap-4 border-t border-[#e5e9e0] p-4">
+        {players.length ? (
+          <>
+            <AdminSelect disabled={disabled} label="Player" onChange={setSelectedPlayerId} options={playerOptions} value={effectiveSelectedPlayerId} />
+            {selectedPlayer && (
+              <PlayerEditForm
+                disabled={disabled}
+                key={selectedPlayer.id}
+                onDeletePlayer={onDeletePlayer}
+                onSavePlayer={onSavePlayer}
+                player={selectedPlayer}
+                teamOptions={teamOptions}
+              />
+            )}
+          </>
+        ) : (
+          <EmptyState text="No players yet. Add real squads after creating teams." />
+        )}
+      </div>
+    </section>
+  )
+}
+
+function PlayerEditForm({ disabled, onDeletePlayer, onSavePlayer, player, teamOptions }) {
+  const [draft, setDraft] = useState(player)
+
+  async function submitPlayerEdit(event) {
+    event.preventDefault()
+
+    if (!draft.nameEn?.trim() || !draft.nameHe?.trim() || !draft.nameAr?.trim() || !draft.teamId) {
+      return
+    }
+
+    await onSavePlayer(draft)
+  }
+
+  async function submitPlayerDelete() {
+    if (window.confirm(`Delete ${draft.nameEn || draft.name}?`)) {
+      await onDeletePlayer(draft.id)
+    }
+  }
+
+  return (
+    <form className="grid min-w-0 gap-4" onSubmit={submitPlayerEdit}>
+      <AdminSelect disabled={disabled || !teamOptions.length} label="Team" onChange={(value) => setDraft((current) => ({ ...current, teamId: value }))} options={teamOptions} value={draft.teamId ?? ''} />
+      <AdminTextInput disabled={disabled} label="Player name - English" onChange={(value) => setDraft((current) => ({ ...current, nameEn: value }))} value={draft.nameEn ?? ''} />
+      <AdminTextInput disabled={disabled} label="Player name - Hebrew" onChange={(value) => setDraft((current) => ({ ...current, nameHe: value }))} value={draft.nameHe ?? ''} />
+      <AdminTextInput disabled={disabled} label="Player name - Arabic" onChange={(value) => setDraft((current) => ({ ...current, nameAr: value }))} value={draft.nameAr ?? ''} />
+      <FieldGrid>
+        <AdminTextInput disabled={disabled} label="Number" min="1" onChange={(value) => setDraft((current) => ({ ...current, number: value }))} type="number" value={draft.number ?? ''} />
+        <AdminSelect disabled={disabled} label="Position" onChange={(value) => setDraft((current) => ({ ...current, position: value }))} options={positionOptions} value={draft.position ?? 'MF'} />
+      </FieldGrid>
+      <div className="flex flex-wrap gap-2">
+        <AdminSubmit disabled={disabled} icon={Save} label="Save player" />
+        <AdminDangerButton disabled={disabled} icon={Trash2} label="Delete player" onClick={submitPlayerDelete} />
+      </div>
+    </form>
   )
 }
 
@@ -3763,9 +4110,24 @@ function MatchDraftFields({ disabled, draft, setDraft, teamOptions }) {
       </FieldGrid>
       <AdminTextInput
         disabled={disabled}
-        label="Venue"
-        onChange={(value) => updateDraft('venue', value)}
-        value={draft.venue}
+        label="Venue/location - English"
+        onChange={(value) => updateDraft('venueEn', value)}
+        placeholder="Stadium or location"
+        value={draft.venueEn ?? ''}
+      />
+      <AdminTextInput
+        disabled={disabled}
+        label="Venue/location - Hebrew"
+        onChange={(value) => updateDraft('venueHe', value)}
+        placeholder="אצטדיון או מיקום"
+        value={draft.venueHe ?? ''}
+      />
+      <AdminTextInput
+        disabled={disabled}
+        label="Venue/location - Arabic"
+        onChange={(value) => updateDraft('venueAr', value)}
+        placeholder="الملعب أو الموقع"
+        value={draft.venueAr ?? ''}
       />
       <FieldGrid>
         <AdminSelect
@@ -3834,6 +4196,7 @@ function EditMatchForm({
   disabled,
   match,
   matchOptions,
+  onDeleteMatch,
   onSaveMatch,
   selectedMatchId,
   setSelectedMatchId,
@@ -3849,6 +4212,12 @@ function EditMatchForm({
     }
 
     await onSaveMatch(draft)
+  }
+
+  async function submitDeleteMatch() {
+    if (draft?.id && window.confirm('Delete this match and its events?')) {
+      await onDeleteMatch(draft.id)
+    }
   }
 
   return (
@@ -3876,7 +4245,10 @@ function EditMatchForm({
           teamOptions={teamOptions}
         />
       )}
-      <AdminSubmit disabled={disabled || !draft} icon={Save} label="Save match" />
+      <div className="flex flex-wrap gap-2">
+        <AdminSubmit disabled={disabled || !draft} icon={Save} label="Save match" />
+        <AdminDangerButton disabled={disabled || !draft} icon={Trash2} label="Delete match" onClick={submitDeleteMatch} />
+      </div>
     </form>
   )
 }
@@ -4060,6 +4432,20 @@ function AdminSubmit({ disabled, icon: Icon, label }) {
       type="submit"
       className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#163428] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45"
       disabled={disabled}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
+  )
+}
+
+function AdminDangerButton({ disabled, icon: Icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-[#e2b7b7] bg-[#fff7f7] px-4 text-sm font-semibold text-[#8b2e2e] disabled:cursor-not-allowed disabled:opacity-45"
+      disabled={disabled}
+      onClick={onClick}
     >
       <Icon className="h-4 w-4" />
       {label}
