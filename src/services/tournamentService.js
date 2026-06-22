@@ -1,5 +1,11 @@
 import { isSupabaseConfigured, supabase, supabaseConfigError } from '../lib/supabase'
-import { isDrawAllowedStage, isLeagueStage, tournamentFormat } from '../config/tournamentFormat.js'
+import { getTeamGroupCode, isDrawAllowedStage, isLeagueStage, tournamentFormat } from '../config/tournamentFormat.js'
+import {
+  buildMatchEventRowsForSave,
+  normalizeMatchDisciplineEvents,
+  normalizePersistedEventType,
+  summarizePlayerEventStats,
+} from '../utils/liveMatch.js'
 
 const viewerStorageKey = 'deir-hanna-world-cup-viewer-id'
 
@@ -22,7 +28,7 @@ function nullIfEmpty(value) {
 }
 
 function toTeam(row) {
-  return {
+  const team = {
     id: row.id,
     country: row.country_en || row.country,
     countryEn: row.country_en || row.country,
@@ -32,6 +38,11 @@ function toTeam(row) {
     group: row.group_code,
     color: row.color,
     secondary: row.secondary,
+  }
+
+  return {
+    ...team,
+    group: getTeamGroupCode(team),
   }
 }
 
@@ -58,10 +69,10 @@ function toMatch(row, eventsByMatch) {
     matchday: row.matchday ?? undefined,
     date: row.date,
     time: row.time,
-    venue: tournamentFormat.fixedVenue,
-    venueEn: tournamentFormat.fixedVenue,
-    venueHe: tournamentFormat.fixedVenue,
-    venueAr: tournamentFormat.fixedVenue,
+    venue: tournamentFormat.fixedVenueEn,
+    venueEn: tournamentFormat.fixedVenueEn,
+    venueHe: tournamentFormat.fixedVenueHe,
+    venueAr: tournamentFormat.fixedVenueAr,
     homeTeamId: row.home_team_id ?? undefined,
     awayTeamId: row.away_team_id ?? undefined,
     homeLabel: row.home_label ?? undefined,
@@ -70,7 +81,18 @@ function toMatch(row, eventsByMatch) {
     awayScore: row.away_score ?? undefined,
     status: row.status,
     minute: row.minute ?? undefined,
-    events: eventsByMatch[row.id] ?? [],
+    matchPhase: row.match_phase ?? undefined,
+    phaseStartedAt: row.phase_started_at ?? undefined,
+    pauseStartedAt: row.pause_started_at ?? undefined,
+    phasePausedSeconds: row.phase_paused_seconds ?? 0,
+    previousPhase: row.previous_phase ?? undefined,
+    matchStartTime: row.match_start_time ?? undefined,
+    matchEndTime: row.match_end_time ?? undefined,
+    firstHalfStartTime: row.first_half_start_time ?? undefined,
+    firstHalfEndTime: row.first_half_end_time ?? undefined,
+    secondHalfStartTime: row.second_half_start_time ?? undefined,
+    secondHalfEndTime: row.second_half_end_time ?? undefined,
+    events: normalizeMatchDisciplineEvents(eventsByMatch[row.id] ?? []),
   }
 }
 
@@ -78,30 +100,19 @@ function toEvent(row) {
   return {
     id: row.id,
     minute: row.minute,
-    type: row.type,
+    eventPhase: row.event_phase ?? undefined,
+    displayMinute: row.display_minute ?? undefined,
+    type: normalizePersistedEventType(row),
     teamId: row.team_id ?? undefined,
+    playerId: row.player_id ?? undefined,
     player: row.player,
+    assistPlayerId: row.assist_player_id ?? undefined,
     assist: row.assist ?? undefined,
   }
 }
 
 function emptyVotes() {
   return { home: 0, draw: 0, away: 0, userChoice: null }
-}
-
-function emptyTournamentVoteBucket() {
-  return { total: 0, candidates: {}, userChoice: null }
-}
-
-function isMissingOptionalTable(error) {
-  const message = error?.message?.toLowerCase() ?? ''
-
-  return (
-    error?.code === '42P01' ||
-    error?.code === 'PGRST205' ||
-    message.includes('does not exist') ||
-    message.includes('schema cache')
-  )
 }
 
 export function getViewerId() {
@@ -183,9 +194,11 @@ export async function loadTournamentData() {
     appLineups[lineup.match_id][lineup.side][target].push(lineupPlayer.player_id)
   })
 
+  const players = playersResponse.data.map(toPlayer)
+
   return {
     teams: teamsResponse.data.map(toTeam),
-    players: playersResponse.data.map(toPlayer),
+    players: summarizePlayerEventStats(players, allMatches),
     matches: allMatches.filter((match) => isLeagueStage(match.stage)),
     knockoutMatches: allMatches.filter((match) => !isLeagueStage(match.stage)),
     lineups: appLineups,
@@ -214,38 +227,6 @@ export async function loadVotes() {
   }, {})
 }
 
-export async function loadTournamentVotes() {
-  const client = requireSupabase()
-  const viewerId = getViewerId()
-  const { data, error } = await client
-    .from('tournament_votes')
-    .select('vote_type, candidate_id, viewer_id')
-
-  if (error) {
-    if (isMissingOptionalTable(error)) {
-      return {}
-    }
-
-    throwIfError(error)
-  }
-
-  return data.reduce((votes, vote) => {
-    if (!votes[vote.vote_type]) {
-      votes[vote.vote_type] = emptyTournamentVoteBucket()
-    }
-
-    const bucket = votes[vote.vote_type]
-    bucket.total += 1
-    bucket.candidates[vote.candidate_id] = (bucket.candidates[vote.candidate_id] ?? 0) + 1
-
-    if (vote.viewer_id === viewerId) {
-      bucket.userChoice = vote.candidate_id
-    }
-
-    return votes
-  }, {})
-}
-
 export async function saveTeam(team) {
   const client = requireSupabase()
   const { error } = await client.from('teams').upsert({
@@ -255,7 +236,7 @@ export async function saveTeam(team) {
     country_he: team.countryHe || '',
     country_ar: team.countryAr || '',
     code: team.code,
-    group_code: team.group,
+    group_code: getTeamGroupCode(team),
     color: team.color,
     secondary: team.secondary,
   })
@@ -279,10 +260,6 @@ export async function savePlayer(player) {
     name_en: player.nameEn || player.name,
     name_he: player.nameHe || '',
     name_ar: player.nameAr || '',
-    goals: player.goals ?? 0,
-    assists: player.assists ?? 0,
-    yellow_cards: player.yellowCards ?? 0,
-    red_cards: player.redCards ?? 0,
   })
 
   throwIfError(error)
@@ -304,10 +281,10 @@ export async function saveMatch(match) {
     matchday: match.matchday ?? null,
     date: match.date,
     time: match.time,
-    venue: tournamentFormat.fixedVenue,
-    venue_en: tournamentFormat.fixedVenue,
-    venue_he: tournamentFormat.fixedVenue,
-    venue_ar: tournamentFormat.fixedVenue,
+    venue: tournamentFormat.fixedVenueEn,
+    venue_en: tournamentFormat.fixedVenueEn,
+    venue_he: tournamentFormat.fixedVenueHe,
+    venue_ar: tournamentFormat.fixedVenueAr,
     home_team_id: nullIfEmpty(match.homeTeamId),
     away_team_id: nullIfEmpty(match.awayTeamId),
     home_label: nullIfEmpty(match.homeLabel),
@@ -316,6 +293,17 @@ export async function saveMatch(match) {
     away_score: match.awayScore ?? null,
     status: match.status,
     minute: match.minute ?? null,
+    match_phase: match.matchPhase ?? null,
+    phase_started_at: match.phaseStartedAt ?? null,
+    pause_started_at: match.pauseStartedAt ?? null,
+    phase_paused_seconds: match.phasePausedSeconds ?? 0,
+    previous_phase: match.previousPhase ?? null,
+    match_start_time: match.matchStartTime ?? null,
+    match_end_time: match.matchEndTime ?? null,
+    first_half_start_time: match.firstHalfStartTime ?? null,
+    first_half_end_time: match.firstHalfEndTime ?? null,
+    second_half_start_time: match.secondHalfStartTime ?? null,
+    second_half_end_time: match.secondHalfEndTime ?? null,
   })
 
   throwIfError(error)
@@ -334,17 +322,7 @@ export async function saveMatchEvents(matchId, events) {
 
   throwIfError(deleteError)
 
-  const rows = events
-    .filter((event) => event.player?.trim() && Number.isFinite(Number(event.minute)))
-    .map((event, index) => ({
-      match_id: matchId,
-      minute: Number(event.minute),
-      type: event.type ?? 'goal',
-      team_id: nullIfEmpty(event.teamId),
-      player: event.player.trim(),
-      assist: nullIfEmpty(event.assist?.trim()),
-      sort_order: index,
-    }))
+  const rows = buildMatchEventRowsForSave(matchId, events)
 
   if (!rows.length) {
     return
@@ -428,24 +406,6 @@ export async function saveVote(match, choice) {
   throwIfError(error)
 }
 
-export async function saveTournamentVote(voteType, candidateId) {
-  const client = requireSupabase()
-  const { error } = await client.from('tournament_votes').upsert(
-    {
-      vote_type: voteType,
-      candidate_id: candidateId,
-      viewer_id: getViewerId(),
-    },
-    { onConflict: 'vote_type,viewer_id' },
-  )
-
-  if (isMissingOptionalTable(error)) {
-    throw new Error('Tournament-wide voting needs the latest supabase/schema.sql migration.')
-  }
-
-  throwIfError(error)
-}
-
 export async function getCurrentSession() {
   const client = requireSupabase()
   const { data, error } = await client.auth.getSession()
@@ -478,6 +438,25 @@ export async function signOutAdmin() {
   const { error } = await client.auth.signOut()
 
   throwIfError(error)
+}
+
+export async function inviteAdmin(email) {
+  const client = requireSupabase()
+  const normalizedEmail = String(email ?? '').trim().toLowerCase()
+
+  if (!normalizedEmail) {
+    throw new Error('Admin email is required.')
+  }
+
+  const { error } = await client
+    .from('admin_users')
+    .upsert(
+      { email: normalizedEmail },
+      { ignoreDuplicates: true, onConflict: 'email' },
+    )
+
+  throwIfError(error)
+  return normalizedEmail
 }
 
 export async function loadAdminAccess(session) {

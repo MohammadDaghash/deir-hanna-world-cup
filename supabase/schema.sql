@@ -5,6 +5,10 @@ create table if not exists public.admin_users (
   created_at timestamptz not null default now()
 );
 
+insert into public.admin_users (email)
+values ('a.a.sportive@gmail.com')
+on conflict (email) do nothing;
+
 create table if not exists public.teams (
   id text primary key,
   country text not null,
@@ -57,6 +61,17 @@ create table if not exists public.matches (
   away_score int,
   status text not null default 'scheduled' check (status in ('scheduled', 'live', 'final')),
   minute int,
+  match_phase text not null default 'scheduled',
+  phase_started_at timestamptz,
+  pause_started_at timestamptz,
+  phase_paused_seconds int not null default 0,
+  previous_phase text,
+  match_start_time timestamptz,
+  match_end_time timestamptz,
+  first_half_start_time timestamptz,
+  first_half_end_time timestamptz,
+  second_half_start_time timestamptz,
+  second_half_end_time timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -65,9 +80,14 @@ create table if not exists public.match_events (
   id uuid primary key default gen_random_uuid(),
   match_id text not null references public.matches(id) on delete cascade,
   minute int not null,
+  event_phase text,
+  display_minute text,
   type text not null default 'goal',
+  event_type text not null default 'goal',
   team_id text references public.teams(id) on delete set null,
+  player_id text references public.players(id) on delete set null,
   player text not null,
+  assist_player_id text references public.players(id) on delete set null,
   assist text,
   sort_order int not null default 0,
   created_at timestamptz not null default now()
@@ -101,15 +121,6 @@ create table if not exists public.match_votes (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (match_id, viewer_id)
-);
-
-create table if not exists public.tournament_votes (
-  vote_type text not null check (vote_type in ('tournament_winner', 'top_scorer', 'best_player')),
-  candidate_id text not null,
-  viewer_id uuid not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  primary key (vote_type, viewer_id)
 );
 
 create table if not exists public.player_match_stats (
@@ -152,11 +163,34 @@ set name_en = coalesce(nullif(name_en, ''), name),
 alter table public.matches add column if not exists venue_en text not null default '';
 alter table public.matches add column if not exists venue_he text not null default '';
 alter table public.matches add column if not exists venue_ar text not null default '';
+alter table public.matches add column if not exists match_phase text not null default 'scheduled';
+alter table public.matches add column if not exists phase_started_at timestamptz;
+alter table public.matches add column if not exists pause_started_at timestamptz;
+alter table public.matches add column if not exists phase_paused_seconds int not null default 0;
+alter table public.matches add column if not exists previous_phase text;
+alter table public.matches add column if not exists match_start_time timestamptz;
+alter table public.matches add column if not exists match_end_time timestamptz;
+alter table public.matches add column if not exists first_half_start_time timestamptz;
+alter table public.matches add column if not exists first_half_end_time timestamptz;
+alter table public.matches add column if not exists second_half_start_time timestamptz;
+alter table public.matches add column if not exists second_half_end_time timestamptz;
 update public.matches
-set venue = 'El Maracana Stadium - Deir Hanna',
-    venue_en = 'El Maracana Stadium - Deir Hanna',
-    venue_he = 'El Maracana Stadium - Deir Hanna',
-    venue_ar = 'El Maracana Stadium - Deir Hanna';
+set venue = 'El Capitano Stadium - Deir Hanna',
+    venue_en = 'El Capitano Stadium - Deir Hanna',
+    venue_he = 'אצטדיון אל קפיטנו - דיר חנא',
+    venue_ar = 'ملعب الكابيتانو ديرحنا (السهل)';
+
+alter table public.match_events add column if not exists event_type text not null default 'goal';
+alter table public.match_events add column if not exists event_phase text;
+alter table public.match_events add column if not exists display_minute text;
+alter table public.match_events add column if not exists player_id text references public.players(id) on delete set null;
+alter table public.match_events add column if not exists assist_player_id text references public.players(id) on delete set null;
+update public.match_events set event_type = coalesce(nullif(event_type, ''), type, 'goal');
+update public.match_events
+set event_type = type
+where event_type = 'goal'
+  and type is not null
+  and type <> 'goal';
 
 create or replace function public.is_admin()
 returns boolean
@@ -226,11 +260,6 @@ create trigger set_match_votes_updated_at
 before update on public.match_votes
 for each row execute function public.set_updated_at();
 
-drop trigger if exists set_tournament_votes_updated_at on public.tournament_votes;
-create trigger set_tournament_votes_updated_at
-before update on public.tournament_votes
-for each row execute function public.set_updated_at();
-
 drop trigger if exists set_player_match_stats_updated_at on public.player_match_stats;
 create trigger set_player_match_stats_updated_at
 before update on public.player_match_stats
@@ -249,13 +278,17 @@ alter table public.match_events enable row level security;
 alter table public.lineups enable row level security;
 alter table public.lineup_players enable row level security;
 alter table public.match_votes enable row level security;
-alter table public.tournament_votes enable row level security;
 alter table public.player_match_stats enable row level security;
 
 drop policy if exists "Admins can read themselves" on public.admin_users;
 create policy "Admins can read themselves"
 on public.admin_users for select
 using (email = auth.jwt() ->> 'email');
+
+drop policy if exists "Admins can invite admin users" on public.admin_users;
+create policy "Admins can invite admin users"
+on public.admin_users for insert
+with check (public.is_admin());
 
 drop policy if exists "Public can read teams" on public.teams;
 create policy "Public can read teams" on public.teams for select using (true);
@@ -293,13 +326,6 @@ drop policy if exists "Public can insert votes" on public.match_votes;
 create policy "Public can insert votes" on public.match_votes for insert with check (true);
 drop policy if exists "Public can update votes" on public.match_votes;
 create policy "Public can update votes" on public.match_votes for update using (true) with check (true);
-
-drop policy if exists "Public can read tournament votes" on public.tournament_votes;
-create policy "Public can read tournament votes" on public.tournament_votes for select using (true);
-drop policy if exists "Public can insert tournament votes" on public.tournament_votes;
-create policy "Public can insert tournament votes" on public.tournament_votes for insert with check (true);
-drop policy if exists "Public can update tournament votes" on public.tournament_votes;
-create policy "Public can update tournament votes" on public.tournament_votes for update using (true) with check (true);
 
 drop policy if exists "Public can read player match stats" on public.player_match_stats;
 create policy "Public can read player match stats" on public.player_match_stats for select using (true);

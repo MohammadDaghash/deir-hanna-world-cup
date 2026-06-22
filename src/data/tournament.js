@@ -1,6 +1,6 @@
 import { tournamentFormat } from '../config/tournamentFormat.js'
 
-export const groups = [tournamentFormat.tableKey]
+export const groups = tournamentFormat.groupKeys
 export const teams = []
 export const players = []
 export const matches = []

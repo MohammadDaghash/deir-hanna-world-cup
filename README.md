@@ -1,63 +1,103 @@
-# Deir Hanna Local World Cup
+# Deir Hanna Local World Cup Platform
 
-React + Vite starter for the Deir Hanna local World Cup tournament app.
+Live multilingual tournament platform built for a real local community tournament in Deir Hanna.
 
-## Included
+This project turns a local football tournament into a mobile-first public experience for spectators and an admin-controlled operations tool for organizers. It manages teams, players, fixtures, live match events, standings, stats, prediction voting, QR/poster sharing, and branded match cards.
 
-- Mobile-first public dashboard
-- Real tournament data entered manually by admins
-- Clickable team cards with squad and detail pages
-- 10-player squad limit with 7 starters and 3 bench players
-- Player entry with team and manually entered English, Hebrew, and Arabic names
-- Clickable player cards with goals, assists, history, and next games
-- English, Hebrew, and Arabic manual names for teams and players
-- Automatic league table calculation
-- Match schedule with final, live, and scheduled states
-- Clickable match rows with scorers, assists, final score, time, and lineups
-- Player leaderboards for goals, assists, and goal contributions
-- Single-game knockout path with semi-finals and final
-- Supabase-backed admin panel for adding, editing, and deleting teams, players, and matches
-- Supabase-backed prediction voting with one browser vote per match
+## What It Does
 
-## Scripts
+- Publishes a public tournament dashboard for fixtures, results, standings, teams, players, knockout path, and leaderboards.
+- Gives admins a live match control workflow for starting matches, pausing/resuming, halftime, second half, goals, assists, cards, penalties, own goals, and final scores.
+- Calculates standings, tiebreakers, player leaderboards, suspensions, and event-derived stats from match data.
+- Supports English, Hebrew, and Arabic names and UI text with RTL-aware display.
+- Generates shareable match cards and WhatsApp-friendly match summaries.
+
+## Key Features
+
+- Mobile-first spectator dashboard
+- Supabase-backed admin panel for teams, players, matches, lineups, and events
+- Live match clock and match-phase control
+- Event timeline for goals, assists, own goals, penalties, yellow cards, and red cards
+- Automatic group standings and knockout bracket views
+- Prediction voting with one browser vote per match
+- Player/team profile pages and leaderboards
+- QR/poster flow for sharing the public tournament site
+- Multilingual EN/HE/AR UX with RTL handling
+- Vercel-ready deployment configuration
+
+## Tech Stack
+
+- React + Vite
+- JavaScript
+- Supabase / PostgreSQL
+- Tailwind CSS
+- lucide-react
+- QRCode
+- Vercel
+
+## Architecture / How It Works
+
+The React app loads tournament data from Supabase tables for teams, players, matches, match events, votes, lineups, and admin users. Public users can view tournament data without authentication. Admin users sign in with Supabase magic-link email auth and can safely edit tournament records.
+
+Core tournament logic lives in utility modules:
+
+- `src/services/tournamentService.js` maps Supabase rows to app models and persists admin changes.
+- `src/utils/tournament.js` calculates standings, leaderboards, team/player stats, tiebreakers, and suspensions.
+- `src/utils/liveMatch.js` handles live match phases, live clock calculation, event creation, scoring, and discipline events.
+- `src/utils/localization.js` manages English, Hebrew, Arabic, and RTL behavior.
+- `supabase/schema.sql` defines the production data model.
+
+## Screenshots
+
+Screenshots are not committed yet. Recommended captures:
+
+- Mobile public dashboard
+- Admin live match control
+- Match detail page with event timeline
+- Shareable match card
+- Standings and knockout views
+
+## Setup
 
 ```bash
 npm install
 npm run dev
-npm run build
-npm run lint
-npm run seed:sql
-node scripts/verify-real-data-mode.mjs
 ```
 
-## Supabase Setup
-
-1. Create a Supabase project.
-2. Copy `.env.example` to `.env.local` and fill in:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-3. Run `supabase/schema.sql` in the Supabase SQL editor.
-   - For an existing demo database, run `supabase/migrations/20260614_prepare_real_data_mode.sql` once. It adds multilingual columns and clears tournament demo rows while preserving `admin_users`.
-   - If your database was created before player numbers/positions became optional, run `supabase/migrations/20260615_remove_player_fields_and_fix_venue.sql` once.
-4. Add your admin email:
-
-```sql
-insert into public.admin_users (email)
-values ('your-email@example.com');
-```
-
-5. Optional: generate cleanup seed SQL. In real-data mode this clears tournament rows and leaves the app ready for manual admin entry:
+Create `.env.local` from `.env.example`:
 
 ```bash
-npm --silent run seed:sql > /tmp/deir-hanna-seed.sql
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-Admin access uses Supabase magic-link email login. Public viewers do not need accounts.
+For a new Supabase database, run `supabase/schema.sql` in the Supabase SQL editor and add an admin email to `public.admin_users`.
 
-## Next Steps
+Useful checks:
 
-- Add real teams, players, fixtures, and scores from the Admin page.
-- Enter English, Hebrew, and Arabic names manually. The app does not auto-translate names.
-- Matches use the fixed venue: El Maracana Stadium - Deir Hanna.
-- Deploy after Supabase env vars and database schema are configured.
-- Add PWA support before sharing by QR code.
+```bash
+npm run build
+npm run lint
+npm run verify:data-safety
+npm run verify:live-workflow
+```
+
+## Production Data Safety
+
+Production tournament data is manually entered and must be preserved. Before migrations or imports:
+
+```bash
+npm run backup:prod-data
+npm run verify:data-safety
+```
+
+Protected tables include `teams`, `players`, `matches`, `match_events`, `match_votes`, and `admin_users`. Seed/import scripts must use stable-key upserts and must not wipe production data unless explicitly requested.
+
+## What This Demonstrates
+
+- Building a real product for a real local community use case
+- Full-stack React + Supabase architecture
+- Data modeling for tournaments, match events, voting, lineups, and admin access
+- Real-time-style match operations and event-derived statistics
+- Mobile-first and multilingual UI design
+- Deployment-focused engineering with Vercel and data-safety scripts

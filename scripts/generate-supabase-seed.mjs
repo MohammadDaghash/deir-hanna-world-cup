@@ -19,14 +19,6 @@ function sqlNumber(value) {
   return Number.isFinite(Number(value)) ? String(Number(value)) : 'null'
 }
 
-function sqlList(values) {
-  return values.map(sqlString).join(', ')
-}
-
-function sqlNotInOrAll(column, ids) {
-  return ids.length ? `${column} not in (${sqlList(ids)})` : 'true'
-}
-
 function values(rows) {
   return rows.join(',\n')
 }
@@ -35,33 +27,23 @@ const allMatches = [...matches, ...knockoutMatches]
 const teamIds = teams.map((team) => team.id)
 const playerIds = players.map((player) => player.id)
 const matchIds = allMatches.map((match) => match.id)
-const fixedVenue = sqlString(tournamentFormat.fixedVenue)
+const fixedVenueEn = sqlString(tournamentFormat.fixedVenueEn)
+const fixedVenueHe = sqlString(tournamentFormat.fixedVenueHe)
+const fixedVenueAr = sqlString(tournamentFormat.fixedVenueAr)
 
 console.log('-- Generated seed data for Deir Hanna Local World Cup')
 console.log('-- Run supabase/schema.sql first, then this output in the Supabase SQL editor.')
-console.log('begin;')
-
-console.log(`
--- Remove stale demo records when the tournament format changes.
-delete from public.match_votes where ${sqlNotInOrAll('match_id', matchIds)};
-delete from public.player_match_stats where ${sqlNotInOrAll('match_id', matchIds)} or ${sqlNotInOrAll('player_id', playerIds)};
-delete from public.match_events where ${sqlNotInOrAll('match_id', matchIds)};
-delete from public.lineup_players
-where lineup_id in (select id from public.lineups where ${sqlNotInOrAll('match_id', matchIds)});
-delete from public.lineups where ${sqlNotInOrAll('match_id', matchIds)};
-delete from public.matches where ${sqlNotInOrAll('id', matchIds)};
-delete from public.tournament_votes
-where (vote_type = 'tournament_winner' and ${sqlNotInOrAll('candidate_id', teamIds)})
-   or (vote_type in ('top_scorer', 'best_player') and ${sqlNotInOrAll('candidate_id', playerIds)});
-delete from public.players where ${sqlNotInOrAll('id', playerIds)};
-delete from public.teams where ${sqlNotInOrAll('id', teamIds)};
-`)
 
 if (!teams.length && !players.length && !allMatches.length) {
-  console.log('-- No seed rows configured. Database is ready for manual admin entry.')
+  console.log('-- No seed rows configured.')
+  console.log('-- This seed file is intentionally a no-op so manually entered tournament data is not deleted.')
+  console.log('begin;')
   console.log('commit;')
   process.exit(0)
 }
+
+console.log('begin;')
+console.log('-- Safe seed mode: upsert rows only. Existing production rows are never deleted.')
 
 console.log(`
 insert into public.teams (id, country, country_en, country_he, country_ar, code, group_code, color, secondary, sort_order)
@@ -109,13 +91,16 @@ console.log(`
 insert into public.matches (
   id, stage, group_code, matchday, date, time, venue, venue_en, venue_he, venue_ar,
   home_team_id, away_team_id, home_label, away_label,
-  home_score, away_score, status, minute
+  home_score, away_score, status, minute,
+  match_phase, phase_started_at, pause_started_at, phase_paused_seconds, previous_phase,
+  match_start_time, match_end_time, first_half_start_time, first_half_end_time,
+  second_half_start_time, second_half_end_time
 )
 values
 ${values(
   allMatches.map(
     (match) =>
-      `(${sqlString(match.id)}, ${sqlString(match.stage)}, ${sqlString(match.group)}, ${sqlNumber(match.matchday)}, ${sqlString(match.date)}, ${sqlString(match.time)}, ${fixedVenue}, ${fixedVenue}, ${fixedVenue}, ${fixedVenue}, ${sqlString(match.homeTeamId)}, ${sqlString(match.awayTeamId)}, ${sqlString(match.homeLabel)}, ${sqlString(match.awayLabel)}, ${sqlNumber(match.homeScore)}, ${sqlNumber(match.awayScore)}, ${sqlString(match.status)}, ${sqlNumber(match.minute)})`,
+      `(${sqlString(match.id)}, ${sqlString(match.stage)}, ${sqlString(match.group)}, ${sqlNumber(match.matchday)}, ${sqlString(match.date)}, ${sqlString(match.time)}, ${fixedVenueEn}, ${fixedVenueEn}, ${fixedVenueHe}, ${fixedVenueAr}, ${sqlString(match.homeTeamId)}, ${sqlString(match.awayTeamId)}, ${sqlString(match.homeLabel)}, ${sqlString(match.awayLabel)}, ${sqlNumber(match.homeScore)}, ${sqlNumber(match.awayScore)}, ${sqlString(match.status)}, ${sqlNumber(match.minute)}, ${sqlString(match.matchPhase)}, ${sqlString(match.phaseStartedAt)}, ${sqlString(match.pauseStartedAt)}, ${sqlNumber(match.phasePausedSeconds)}, ${sqlString(match.previousPhase)}, ${sqlString(match.matchStartTime)}, ${sqlString(match.matchEndTime)}, ${sqlString(match.firstHalfStartTime)}, ${sqlString(match.firstHalfEndTime)}, ${sqlString(match.secondHalfStartTime)}, ${sqlString(match.secondHalfEndTime)})`,
   ),
 )}
 on conflict (id) do update set
@@ -135,26 +120,33 @@ on conflict (id) do update set
   home_score = excluded.home_score,
   away_score = excluded.away_score,
   status = excluded.status,
-  minute = excluded.minute;
+  minute = excluded.minute,
+  match_phase = excluded.match_phase,
+  phase_started_at = excluded.phase_started_at,
+  pause_started_at = excluded.pause_started_at,
+  phase_paused_seconds = excluded.phase_paused_seconds,
+  previous_phase = excluded.previous_phase,
+  match_start_time = excluded.match_start_time,
+  match_end_time = excluded.match_end_time,
+  first_half_start_time = excluded.first_half_start_time,
+  first_half_end_time = excluded.first_half_end_time,
+  second_half_start_time = excluded.second_half_start_time,
+  second_half_end_time = excluded.second_half_end_time;
 `)
 
-console.log('delete from public.match_events;')
 const eventRows = allMatches.flatMap((match) =>
   (match.events ?? []).map((event, index) =>
-    `(${sqlString(match.id)}, ${sqlNumber(event.minute)}, ${sqlString(event.type)}, ${sqlString(event.teamId)}, ${sqlString(event.player)}, ${sqlString(event.assist)}, ${index})`,
+    `(${sqlString(match.id)}, ${sqlNumber(event.minute)}, ${sqlString(event.eventPhase)}, ${sqlString(event.displayMinute)}, ${sqlString(event.type)}, ${sqlString(event.type)}, ${sqlString(event.teamId)}, ${sqlString(event.playerId)}, ${sqlString(event.player)}, ${sqlString(event.assistPlayerId)}, ${sqlString(event.assist)}, ${index})`,
   ),
 )
 
 if (eventRows.length) {
   console.log(`
-insert into public.match_events (match_id, minute, type, team_id, player, assist, sort_order)
+insert into public.match_events (match_id, minute, event_phase, display_minute, type, event_type, team_id, player_id, player, assist_player_id, assist, sort_order)
 values
 ${values(eventRows)};
 `)
 }
-
-console.log('delete from public.lineup_players;')
-console.log('delete from public.lineups;')
 
 for (const [matchId, matchLineups] of Object.entries(lineups)) {
   for (const side of ['home', 'away']) {

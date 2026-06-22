@@ -19,12 +19,26 @@
 
 html {
   background: #f6f7f2;
+  max-width: 100%;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   min-width: 320px;
   min-height: 100svh;
+  max-width: 100%;
   margin: 0;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+#root {
+  min-height: 100svh;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 button,

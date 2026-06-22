@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" role="img" aria-label="Portugal flag">
+  <rect width="48" height="80" fill="#006600"/>
+  <rect x="48" width="72" height="80" fill="#ff0000"/>
+  <circle cx="48" cy="40" r="15" fill="#ffcc00"/>
+  <path fill="#fff" stroke="#003399" stroke-width="2" d="M39 31h18v18c0 7-9 11-9 11s-9-4-9-11V31z"/>
+  <path fill="#d40000" d="M44 36h8v7h-8zM44 46h8v7h-8z"/>
+</svg>

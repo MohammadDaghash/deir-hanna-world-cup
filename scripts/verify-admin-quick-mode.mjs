@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+
+const app = fs.readFileSync('src/App.jsx', 'utf8')
+
+assert.match(app, /function AdminQuickModeScreen\(/, 'AdminQuickModeScreen component should exist')
+assert.match(app, /ui\.quickMode/, 'Quick Mode label should be visible through i18n')
+assert.match(app, /quickModeMatchId/, 'Admin should track the selected quick mode match')
+assert.match(app, /onOpenQuickMode/, 'Quick Mode opener should be wired through admin match editing')
+assert.match(app, /adminUnlocked && quickModeMatch/, 'Quick Mode should render only for unlocked admins')
+assert.match(app, /quick-action-grid/, 'Quick Mode should use a dedicated large action grid')
+assert.match(app, /ui\.goal/, 'Goal action should be present')
+assert.match(app, /liveEventTypes\.ownGoal/, 'Own Goal action should be present')
+assert.match(app, /liveEventTypes\.penalty/, 'Penalty action should be present')
+assert.match(app, /penaltyOutcome/, 'Penalty flow should choose goal or miss/saved')
+assert.doesNotMatch(app, /startEvent\(liveEventTypes\.assist\)/, 'Quick Mode should not expose assist actions')
+assert.match(app, /ui\.yellowCard/, 'Yellow Card action should be present')
+assert.match(app, /ui\.redCard/, 'Red Card action should be present')
+assert.match(app, /ui\.startMatch/, 'Start Match action should be present')
+assert.match(app, /ui\.halftime/, 'Half Time action should be present')
+assert.match(app, /ui\.startSecondHalf/, 'Start Second Half action should be present')
+assert.match(app, /ui\.endMatch/, 'End Match action should be present')
+assert.match(app, /playerSearch/, 'Quick Mode should support searchable player selection')
+assert.doesNotMatch(app, /assistSearch/, 'Quick Mode should not support assist selection')
+assert.match(app, /ui\.undoLastEvent/, 'Quick Mode should allow undoing the last event')
+assert.match(app, /ui\.editLastEvent/, 'Quick Mode should allow editing the last event')
+assert.match(app, /handleQuickModeSaveMatch/, 'Quick Mode should persist match and event changes')
+assert.match(app, /applyLiveEventToMatch/, 'Quick Mode should update match score through live event logic')
+assert.match(app, /AdminEventTimeline/, 'Quick Mode should show recent event timeline')
+
+console.log('admin quick mode checks passed')

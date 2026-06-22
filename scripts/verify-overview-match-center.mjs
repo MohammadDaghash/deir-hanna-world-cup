@@ -1,0 +1,71 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+
+const app = fs.readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
+const css = fs.readFileSync(new URL('../src/App.css', import.meta.url), 'utf8')
+
+function section(startMarker, endMarker) {
+  const start = app.indexOf(startMarker)
+  assert.notEqual(start, -1, `${startMarker} should exist`)
+  const end = app.indexOf(endMarker, start + startMarker.length)
+  assert.notEqual(end, -1, `${endMarker} should exist after ${startMarker}`)
+  return app.slice(start, end)
+}
+
+const overview = section('function Overview(', 'function OverviewMatchCenter(')
+const matchCenter = section('function OverviewMatchCenter(', 'function OverviewMatchCenterCard(')
+const matchCenterCard = section('function OverviewMatchCenterCard(', 'function OverviewMatchEvents(')
+const vote = section('function PredictionVote(', 'function VoteDrawButton(')
+const appShell = section('function App(', 'function Header(')
+const quickLinks = section('function SpectatorQuickLinks(', 'function QualificationRace(')
+const matchCenterSelector = section('function getOverviewMatchCenterMatches(', 'function localizeStats(')
+
+assert.match(overview, /<OverviewMatchCenter/, 'Overview should render the new unified Match Center')
+assert.doesNotMatch(overview, /<TodaySection/, 'Overview should not render the old Today section')
+assert.doesNotMatch(overview, /<ViewerFocus/, 'Overview should not render the old Next Match focus panel')
+assert.doesNotMatch(overview, /<MatchDayPanel/, 'Overview should not render the old Today/Matchday panel')
+
+assert.match(app, /function getOverviewMatchCenterMatches\(/, 'Overview should have a focused match-center selector')
+assert.match(app, /match\.date === todayKey/, 'Match Center selector should use today matches')
+assert.match(app, /\.slice\(0,\s*2\)/, 'Match Center should show only today’s two matches')
+assert.match(app, /function getLatestFinishedMatch\(/, 'Overview should have a latest-finished selector')
+assert.match(app, /function getOverviewFeaturedMatch\(/, 'Overview should have an explicit featured-match selector')
+assert.match(app, /compareMatchKickoffDesc/, 'Finished matches should sort by kickoff descending')
+assert.match(app, /getIsraelMatchKickoffTimestamp/, 'Finished match sorting should use Israel kickoff timestamps')
+assert.match(appShell, /getOverviewFeaturedMatch\(allMatches\)/, 'Header featured match should use the explicit selector')
+assert.doesNotMatch(appShell, /liveMatches\[0\]\s*\?\?\s*allMatches\[0\]/, 'Header featured match must not fall back to the oldest loaded match')
+assert.match(matchCenterSelector, /compareMatchKickoffAsc/, 'Match Center should keep upcoming/today matches in ascending kickoff order')
+assert.match(matchCenter, /ui\.matchCenter/, 'Match Center should use the translated Match Center title')
+assert.match(matchCenter, /ui\.noMatchesToday/, 'Match Center should keep a clean empty state')
+assert.match(matchCenterCard, /<PredictionVote[\s\S]*compact/, 'Each Match Center card should include compact voting summary')
+assert.match(matchCenterCard, /<OverviewMatchEvents/, 'Match Center cards should show goals/events')
+assert.match(matchCenterCard, /MatchCountdown/, 'Match Center cards should show countdown when relevant')
+assert.match(matchCenterCard, /overview-match-card/, 'Match Center cards should use the unified compact card class')
+assert.doesNotMatch(matchCenter, /highlight=\{/, 'First Match Center card should not receive different highlight styling')
+assert.doesNotMatch(matchCenterCard, /highlight\s*=/, 'Match Center card should not branch layout by highlight')
+assert.doesNotMatch(matchCenterCard, /highlight\s*\?/, 'Match Center card styling should be consistent for all matches')
+
+assert.match(vote, /vote-card/, 'PredictionVote should expose a class for dark-mode card contrast')
+assert.match(vote, /vote-summary-pill/, 'PredictionVote summary pill should expose a dark-mode class')
+assert.match(app, /vote-option/, 'Vote buttons should expose a class for dark-mode option contrast')
+assert.match(app, /vote-fill/, 'Vote fill bars should expose a class for dark-mode fill contrast')
+assert.match(app, /vote-label/, 'Vote labels should expose a dark-mode class')
+assert.match(app, /vote-meta/, 'Vote metadata should expose a dark-mode class')
+
+assert.match(css, /html\[data-theme='dark'\] \.vote-card/, 'Dark mode should style the vote card')
+assert.match(css, /html\[data-theme='dark'\] \.vote-option/, 'Dark mode should style vote options')
+assert.match(css, /html\[data-theme='dark'\] \.vote-fill/, 'Dark mode should style vote fill bars')
+assert.match(css, /html\[data-theme='dark'\] \.vote-label/, 'Dark mode should style vote labels')
+assert.match(css, /html\[data-theme='dark'\] \.vote-meta/, 'Dark mode should style vote percentages/counts')
+
+assert.match(app, /function BackToOverviewButton\(/, 'A reusable Back to Overview button should exist')
+assert.match(appShell, /overviewShortcutActive/, 'App should track pages opened from Overview shortcuts')
+assert.match(appShell, /handleOverviewShortcutSelect/, 'Overview shortcuts should use a dedicated navigation handler')
+assert.match(appShell, /BackToOverviewButton/, 'Shortcut-opened top-level pages should render Back to Overview')
+assert.match(appShell, /addEventListener\('popstate'/, 'Browser back should be handled for shortcut-opened pages')
+assert.match(appShell, /returnToOverview/, 'Back to Overview button should return directly to Overview')
+assert.match(overview, /onShortcutSelect=\{/, 'Overview should pass a dedicated shortcut handler')
+assert.match(quickLinks, /onShortcutSelect/, 'Quick links should use shortcut navigation')
+assert.match(app, /backToOverview/, 'Back to Overview label should be translated')
+
+console.log('overview match center checks passed')

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" role="img" aria-label="Algeria flag">
+  <rect width="60" height="80" fill="#006233"/>
+  <rect x="60" width="60" height="80" fill="#fff"/>
+  <circle cx="65" cy="40" r="19" fill="#d21034"/>
+  <circle cx="71" cy="40" r="16" fill="#fff"/>
+  <path fill="#d21034" d="M78 24l4.9 10.1L94 35.7l-8 7.8 1.9 11.1L78 49.4l-9.9 5.2 1.9-11.1-8-7.8 11.1-1.6L78 24z"/>
+</svg>
